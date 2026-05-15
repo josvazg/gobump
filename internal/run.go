@@ -21,6 +21,7 @@ type runner struct {
 	cfg           Config
 	path          string
 	fetchReleases func(ctx context.Context) ([]Release, error)
+	git           func(dir string, args ...string) (string, error)
 }
 
 func newRunner(cfg Config, path string) *runner {
@@ -30,10 +31,16 @@ func newRunner(cfg Config, path string) *runner {
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
 			return FetchReleases(ctx, nil, "", "")
 		},
+		git: defaultGit,
 	}
 }
 
 func (r *runner) run(ctx context.Context) int {
+	if err := r.checkGitEnv(); err != nil {
+		fmt.Fprintf(os.Stderr, "gobump: %v\n", err)
+		return 1
+	}
+
 	modFiles, err := FindModFiles(r.path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: discovering modules: %v\n", err)
