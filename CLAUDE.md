@@ -34,6 +34,20 @@ All logic lives in `internal/`. The runner receives:
 - **CLI args** as `[]string` (keeps `main` testable without subprocess tricks).
 - An **env lookup func** `func(string) string` (makes env vars injectable in tests).
 
+## Development Environment
+
+Use **devbox** for all tooling — `devbox shell` gives a reproducible env with Go, govulncheck, golangci-lint, mage, and goreleaser pinned in `devbox.json`.
+
+Use **mage** as the task runner. Prefer `mage <target>` over raw `go` commands so the full pipeline (test → lint → build) is consistent:
+
+| Target | What it does |
+|---|---|
+| `mage test` | `go test ./...` |
+| `mage build` | builds `./gobump` |
+| `mage lint` | `golangci-lint run ./...` |
+| `mage check` | test then lint (the CI gate) |
+| `mage install` | `go install .` |
+
 ## Safety First
 
 1. **Test before commit** — `go test ./...` must pass before any `git commit`.

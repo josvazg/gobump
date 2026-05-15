@@ -47,7 +47,7 @@ func FetchReleases(ctx context.Context, client *http.Client, apiURL string) ([]R
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("releases API returned HTTP %d", resp.StatusCode)

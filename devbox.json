@@ -4,6 +4,7 @@
     "go@latest",
     "govulncheck@latest",
     "golangci-lint@latest",
+    "mage@latest",
     "goreleaser@latest",
     "git@latest"
   ],
