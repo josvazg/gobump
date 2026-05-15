@@ -18,6 +18,7 @@ type Config struct {
 	Force     bool
 	Skip      string
 	Custom    string
+	DryRun    bool
 }
 
 // ParseFlags parses CLI args into a Config and an optional target path.
@@ -34,6 +35,7 @@ func ParseFlags(args []string) (Config, string, error) {
 	fs.Var(&soak, "soak", "soak duration before bumping (e.g. 90d)")
 	fs.StringVar(&cfg.Protected, "protected", "main,master,trunk", "protected branches")
 	fs.BoolVar(&cfg.Force, "force", false, "override branch protection and dirty-tree checks")
+	fs.BoolVar(&cfg.DryRun, "dryrun", false, "print what would be done without making changes")
 	fs.StringVar(&cfg.Skip, "skip", "", "skip steps: all|major|govulncheck|custom")
 	fs.StringVar(&cfg.Custom, "custom", "", "extra command to run after bumping, before testing")
 

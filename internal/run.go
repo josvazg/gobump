@@ -144,8 +144,17 @@ func (r *runner) processModule(modFile string, latest *Release) (bool, int) {
 	}
 
 	should, reason := ShouldBumpGo(current, latest, r.cfg.Soak, time.Now())
+	if should && r.shouldSkip("major") && isMajorBump(current, latest.Version) {
+		fmt.Printf("%s: skipping cross-minor bump %s → %s (-skip=major)\n",
+			modFile, current, strings.TrimPrefix(latest.Version, "go"))
+		return false, 0
+	}
 	fmt.Printf("%s: %s\n", modFile, reason)
 	if !should {
+		return false, 0
+	}
+
+	if r.cfg.DryRun {
 		return false, 0
 	}
 

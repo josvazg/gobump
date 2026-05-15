@@ -35,6 +35,15 @@ func ShouldBumpGo(goModVersion string, latest *Release, soakDur time.Duration, n
 	return true, fmt.Sprintf("bump go %s → %s (released %.0f days ago)", goModVersion, strings.TrimPrefix(latest.Version, "go"), age.Hours()/24)
 }
 
+// isMajorBump reports whether bumping from current (go.mod bare form, e.g.
+// "1.26.3") to latest (e.g. "go1.27.0") crosses a Go minor version boundary,
+// which gobump treats as a "major" release requiring explicit opt-in.
+func isMajorBump(current, latest string) bool {
+	cur := splitGoVersion(current)
+	lat := splitGoVersion(latest)
+	return lat[0] != cur[0] || lat[1] != cur[1]
+}
+
 // compareGoVersions compares two Go version strings, which may be in either
 // "go1.22.3" or "1.22.3" or "1.22" format. Returns -1, 0, or 1.
 func compareGoVersions(a, b string) int {
