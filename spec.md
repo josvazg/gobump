@@ -37,7 +37,8 @@ gobump [path] [flags]
 | `-soak`      | `90d`                    | Duration to wait after a Go release before auto-bumping. |
 | `-protected` | `main,master,trunk`      | Comma-separated list of branches to never push to without `-force`. |
 | `-force`     | `false`                  | Overrides branch protection and "dirty tree" checks. |
-| `-skip`      | `""`                     | Options: `all`, `major`, `govulncheck`, `custom`. |
+| `-skip`      | `""`                     | Options: `major`, `govulncheck`, `custom`. |
+| `-dryrun`    | `false`                  | Print what would be done without making any changes. |
 | `-custom`    | `""`                     | Extra shell command to run (e.g., `make generate`) after bumping but before testing. |
 
 ---
