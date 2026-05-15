@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.2/.schema/devbox.schema.json",
+  "packages": [
+    "go@latest",
+    "govulncheck@latest",
+    "golangci-lint@latest",
+    "goreleaser@latest",
+    "git@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "echo 'gobump dev environment ready'"
+    ],
+    "scripts": {
+      "build": "go build -o gobump .",
+      "test": "go test ./...",
+      "lint": "golangci-lint run ./...",
+      "install": "go install .",
+      "release": "goreleaser release --snapshot --clean"
+    }
+  }
+}

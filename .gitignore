@@ -1,0 +1,4 @@
+gobump
+dist/
+*.test
+*.out
