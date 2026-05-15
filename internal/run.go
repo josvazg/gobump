@@ -106,7 +106,7 @@ func (r *runner) run(ctx context.Context) int {
 		return 1
 	}
 
-	return 0
+	return r.finalize(bumpedDirs)
 }
 
 // processModule updates a single go.mod. Returns (bumped, exitCode).
