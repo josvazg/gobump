@@ -54,12 +54,14 @@ func FetchReleases(ctx context.Context, client *http.Client, dlURL, commitBaseUR
 		return nil, err
 	}
 
-	// Enrich only the latest stable release with its date.
+	// Soak time is measured from when the minor version first shipped (x.y.0),
+	// not the latest patch — patches are just fixes within an already-soaked line.
 	latest := LatestStable(releases)
 	if latest != nil {
-		date, err := fetchCommitDate(ctx, client, commitBaseURL+"/"+latest.Version)
+		origin := minorOrigin(latest.Version)
+		date, err := fetchCommitDate(ctx, client, commitBaseURL+"/"+origin)
 		if err != nil {
-			return nil, fmt.Errorf("fetching date for %s: %w", latest.Version, err)
+			return nil, fmt.Errorf("fetching date for %s: %w", origin, err)
 		}
 		latest.Date = date
 	}
@@ -119,6 +121,13 @@ func fetchCommitDate(ctx context.Context, client *http.Client, url string) (time
 		return time.Time{}, fmt.Errorf("decoding commit info: %w", err)
 	}
 	return info.Commit.Committer.Date, nil
+}
+
+// minorOrigin returns the x.y.0 tag for a given Go version, e.g.
+// "go1.26.3" → "go1.26.0". Soak time is measured from this tag.
+func minorOrigin(version string) string {
+	p := splitGoVersion(version)
+	return fmt.Sprintf("go%d.%d.0", p[0], p[1])
 }
 
 // LatestStable returns the highest-versioned stable release, or nil if none.

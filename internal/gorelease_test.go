@@ -13,11 +13,14 @@ import (
 )
 
 // fakeDLServer serves a go.dev/dl-style version list on / and a GitHub
-// commit-style date response on /commits/<version>.
-func fakeDLServer(t *testing.T, versions []map[string]any, commitDate time.Time) *httptest.Server {
+// commit-style date response on /commits/<version>. It records which version
+// was requested for the commit date so tests can assert on it.
+func fakeDLServer(t *testing.T, versions []map[string]any, commitDate time.Time) (*httptest.Server, *string) {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var requestedCommitVersion string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/commits/") {
+			requestedCommitVersion = strings.TrimPrefix(r.URL.Path, "/commits/")
 			payload := map[string]any{
 				"commit": map[string]any{
 					"committer": map[string]any{
@@ -34,6 +37,7 @@ func fakeDLServer(t *testing.T, versions []map[string]any, commitDate time.Time)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}))
+	return srv, &requestedCommitVersion
 }
 
 func TestFetchReleases(t *testing.T) {
@@ -44,7 +48,7 @@ func TestFetchReleases(t *testing.T) {
 		{"version": "go1.23rc1", "stable": false},
 	}
 
-	srv := fakeDLServer(t, versions, published)
+	srv, gotCommitVersion := fakeDLServer(t, versions, published)
 	defer srv.Close()
 
 	releases, err := internal.FetchReleases(context.Background(), nil, srv.URL, srv.URL+"/commits")
@@ -63,6 +67,11 @@ func TestFetchReleases(t *testing.T) {
 	}
 	if len(releases) != 3 {
 		t.Errorf("expected 3 total releases, got %d", len(releases))
+	}
+
+	// Date must be fetched for the x.y.0 origin, not the latest patch.
+	if *gotCommitVersion != "go1.22.0" {
+		t.Errorf("commit date fetched for %q, want go1.22.0", *gotCommitVersion)
 	}
 
 	// Latest stable (go1.22.3) should have its date populated.
