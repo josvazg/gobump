@@ -21,6 +21,10 @@ func ShouldBumpGo(goModVersion string, latest *Release, soakDur time.Duration, n
 		return false, fmt.Sprintf("already at %s", current)
 	}
 
+	if latest.Date.IsZero() {
+		return false, fmt.Sprintf("release date for %s unknown, skipping soak check", latest.Version)
+	}
+
 	age := now.Sub(latest.Date)
 	if age < soakDur {
 		remaining := soakDur - age

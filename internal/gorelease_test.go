@@ -5,35 +5,53 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/josvazg/gobump/internal"
 )
 
-func TestFetchReleases(t *testing.T) {
-	published := time.Date(2024, 5, 1, 17, 0, 0, 0, time.UTC)
-	fixture := []map[string]any{
-		{"tag_name": "go1.22.3", "published_at": published.Format(time.RFC3339), "prerelease": false, "draft": false},
-		{"tag_name": "go1.22.2", "published_at": published.Add(-30 * 24 * time.Hour).Format(time.RFC3339), "prerelease": false, "draft": false},
-		{"tag_name": "go1.23rc1", "published_at": published.Add(24 * time.Hour).Format(time.RFC3339), "prerelease": true, "draft": false},
-		{"tag_name": "go1.22.3", "published_at": published.Format(time.RFC3339), "prerelease": false, "draft": true}, // draft, must be excluded
-		{"tag_name": "notago", "published_at": published.Format(time.RFC3339), "prerelease": false, "draft": false},  // non-go tag, excluded
-	}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewEncoder(w).Encode(fixture); err != nil {
+// fakeDLServer serves a go.dev/dl-style version list on / and a GitHub
+// commit-style date response on /commits/<version>.
+func fakeDLServer(t *testing.T, versions []map[string]any, commitDate time.Time) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/commits/") {
+			payload := map[string]any{
+				"commit": map[string]any{
+					"committer": map[string]any{
+						"date": commitDate.Format(time.RFC3339),
+					},
+				},
+			}
+			if err := json.NewEncoder(w).Encode(payload); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		if err := json.NewEncoder(w).Encode(versions); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}))
+}
+
+func TestFetchReleases(t *testing.T) {
+	published := time.Date(2024, 5, 1, 17, 0, 0, 0, time.UTC)
+	versions := []map[string]any{
+		{"version": "go1.22.3", "stable": true},
+		{"version": "go1.22.2", "stable": true},
+		{"version": "go1.23rc1", "stable": false},
+	}
+
+	srv := fakeDLServer(t, versions, published)
 	defer srv.Close()
 
-	releases, err := internal.FetchReleases(context.Background(), nil, srv.URL)
+	releases, err := internal.FetchReleases(context.Background(), nil, srv.URL, srv.URL+"/commits")
 	if err != nil {
 		t.Fatalf("FetchReleases: %v", err)
 	}
 
-	// 3 entries match go* prefix, minus 1 draft, minus 1 prerelease = 2 stable
 	stable := 0
 	for _, r := range releases {
 		if r.Stable {
@@ -43,8 +61,17 @@ func TestFetchReleases(t *testing.T) {
 	if stable != 2 {
 		t.Errorf("expected 2 stable releases, got %d", stable)
 	}
-	if len(releases) != 3 { // 2 stable + 1 prerelease (rc1)
-		t.Errorf("expected 3 total releases (excl draft/non-go), got %d", len(releases))
+	if len(releases) != 3 {
+		t.Errorf("expected 3 total releases, got %d", len(releases))
+	}
+
+	// Latest stable (go1.22.3) should have its date populated.
+	latest := internal.LatestStable(releases)
+	if latest == nil {
+		t.Fatal("expected a latest stable release")
+	}
+	if !latest.Date.Equal(published) {
+		t.Errorf("latest.Date = %v, want %v", latest.Date, published)
 	}
 }
 

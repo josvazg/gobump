@@ -28,7 +28,7 @@ func newRunner(cfg Config, path string) *runner {
 		cfg:  cfg,
 		path: path,
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
-			return FetchReleases(ctx, nil, "")
+			return FetchReleases(ctx, nil, "", "")
 		},
 	}
 }
