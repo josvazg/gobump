@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 )
 
@@ -22,6 +24,7 @@ type runner struct {
 	path          string
 	fetchReleases func(ctx context.Context) ([]Release, error)
 	git           func(dir string, args ...string) (string, error)
+	goCmd         func(dir string, args ...string) (string, error)
 }
 
 func newRunner(cfg Config, path string) *runner {
@@ -31,8 +34,16 @@ func newRunner(cfg Config, path string) *runner {
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
 			return FetchReleases(ctx, nil, "", "")
 		},
-		git: defaultGit,
+		git:   defaultGit,
+		goCmd: defaultGoCmd,
 	}
+}
+
+func defaultGoCmd(dir string, args ...string) (string, error) {
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	return string(out), err
 }
 
 func (r *runner) run(ctx context.Context) int {
@@ -83,5 +94,11 @@ func (r *runner) processModule(modFile string, latest *Release) int {
 		fmt.Fprintf(os.Stderr, "gobump: updating %s: %v\n", modFile, err)
 		return 1
 	}
+
+	if _, err := r.goCmd(filepath.Dir(modFile), "mod", "tidy"); err != nil {
+		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", filepath.Dir(modFile), err)
+		return 1
+	}
+
 	return 0
 }
