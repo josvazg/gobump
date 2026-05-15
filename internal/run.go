@@ -110,12 +110,22 @@ func (r *runner) run(ctx context.Context) int {
 		return 0
 	}
 
-	testDir := r.path
-	if testDir == "" {
-		testDir = "."
+	rootDir := r.path
+	if rootDir == "" {
+		rootDir = "."
 	}
+
+	if r.cfg.Custom != "" && !r.shouldSkip("custom") {
+		fmt.Printf("running: %s\n", r.cfg.Custom)
+		if err := r.runShell(rootDir, r.cfg.Custom); err != nil {
+			fmt.Fprintf(os.Stderr, "gobump: custom command failed: %v\n", err)
+			r.revert(bumpedDirs)
+			return 1
+		}
+	}
+
 	fmt.Printf("running: %s\n", r.cfg.TestCmd)
-	if err := r.runShell(testDir, r.cfg.TestCmd); err != nil {
+	if err := r.runShell(rootDir, r.cfg.TestCmd); err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: tests failed: %v\n", err)
 		fmt.Fprintln(os.Stderr, "gobump: reverting changes")
 		r.revert(bumpedDirs)
