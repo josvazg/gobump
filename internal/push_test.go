@@ -32,7 +32,8 @@ func bumpedRunner(t *testing.T) (*runner, *[][]string, *[]string) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd: func(string, ...string) (string, error) { return "", nil },
+		goCmd:       func(string, ...string) (string, error) { return "", nil },
+		govulncheck: func(string) error { return nil },
 		runShell: func(_, cmd string) error {
 			shellCmds = append(shellCmds, cmd)
 			return nil

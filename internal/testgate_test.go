@@ -25,7 +25,8 @@ func TestTestGate_runsAfterBump(t *testing.T) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:    func(string, ...string) (string, error) { return "", nil },
+		goCmd:       func(string, ...string) (string, error) { return "", nil },
+		govulncheck: func(string) error { return nil },
 		runShell: func(string, string) error { testRan = true; return nil },
 		git:      func(string, ...string) (string, error) { return "", nil },
 	}
@@ -53,7 +54,8 @@ func TestTestGate_revertsOnFailure(t *testing.T) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:    func(string, ...string) (string, error) { return "", nil },
+		goCmd:       func(string, ...string) (string, error) { return "", nil },
+		govulncheck: func(string) error { return nil },
 		runShell: func(string, string) error { return errors.New("tests failed") },
 		git: func(_ string, args ...string) (string, error) {
 			if len(args) > 0 && args[0] == "checkout" {
@@ -86,7 +88,8 @@ func TestTestGate_skippedWhenNothingBumped(t *testing.T) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:    func(string, ...string) (string, error) { return "", nil },
+		goCmd:       func(string, ...string) (string, error) { return "", nil },
+		govulncheck: func(string) error { return nil },
 		runShell: func(string, string) error { testRan = true; return nil },
 		git:      func(string, ...string) (string, error) { return "", nil },
 	}

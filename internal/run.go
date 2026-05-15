@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type runner struct {
 	git           func(dir string, args ...string) (string, error)
 	goCmd         func(dir string, args ...string) (string, error)
 	runShell      func(dir, cmd string) error
+	govulncheck   func(dir string) error
 }
 
 func newRunner(cfg Config, path string) *runner {
@@ -38,7 +40,20 @@ func newRunner(cfg Config, path string) *runner {
 		git:      defaultGit,
 		goCmd:    defaultGoCmd,
 		runShell: defaultRunShell,
+		govulncheck: func(dir string) error {
+			return defaultRunShell(dir, "govulncheck ./...")
+		},
 	}
+}
+
+func (r *runner) shouldSkip(step string) bool {
+	for _, s := range strings.Split(r.cfg.Skip, ",") {
+		s = strings.TrimSpace(s)
+		if s == "all" || s == step {
+			return true
+		}
+	}
+	return false
 }
 
 func defaultGoCmd(dir string, args ...string) (string, error) {
@@ -82,11 +97,12 @@ func (r *runner) run(ctx context.Context) int {
 	var bumpedDirs []string
 	for _, modFile := range modFiles {
 		bumped, code := r.processModule(modFile, latest)
-		if code != 0 {
-			return code
-		}
 		if bumped {
 			bumpedDirs = append(bumpedDirs, filepath.Dir(modFile))
+		}
+		if code != 0 {
+			r.revert(bumpedDirs)
+			return code
 		}
 	}
 
@@ -128,9 +144,21 @@ func (r *runner) processModule(modFile string, latest *Release) (bool, int) {
 		return false, 1
 	}
 
-	if _, err := r.goCmd(filepath.Dir(modFile), "mod", "tidy"); err != nil {
-		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", filepath.Dir(modFile), err)
-		return false, 1
+	modDir := filepath.Dir(modFile)
+
+	if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
+		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
+		return true, 1
+	}
+
+	if !r.shouldSkip("govulncheck") {
+		if err := r.govulncheck(modDir); err != nil {
+			fmt.Fprintf(os.Stderr,
+				"gobump: vulnerabilities found in %s: %v\n", modDir, err)
+			fmt.Fprintf(os.Stderr,
+				"gobump: library updates not yet automated — fix manually\n")
+			return true, 1
+		}
 	}
 
 	return true, 0

@@ -18,9 +18,10 @@ func TestRunner_bumpsGoVersion(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	r := &runner{
 		cfg:   Config{Soak: 90 * 24 * time.Hour, TestCmd: "go test ./...", Force: true},
-		goCmd:    func(string, ...string) (string, error) { return "", nil },
-		runShell: func(string, string) error { return nil },
-		git:      func(string, ...string) (string, error) { return "", nil },
+		goCmd:       func(string, ...string) (string, error) { return "", nil },
+		runShell:    func(string, string) error { return nil },
+		git:         func(string, ...string) (string, error) { return "", nil },
+		govulncheck: func(string) error { return nil },
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
@@ -50,9 +51,10 @@ func TestRunner_skipsWhenSoaking(t *testing.T) {
 	fresh := time.Now().Add(-10 * 24 * time.Hour)
 	r := &runner{
 		cfg:   Config{Soak: 90 * 24 * time.Hour, TestCmd: "go test ./...", Force: true},
-		goCmd:    func(string, ...string) (string, error) { return "", nil },
-		runShell: func(string, string) error { return nil },
-		git:      func(string, ...string) (string, error) { return "", nil },
+		goCmd:       func(string, ...string) (string, error) { return "", nil },
+		runShell:    func(string, string) error { return nil },
+		git:         func(string, ...string) (string, error) { return "", nil },
+		govulncheck: func(string) error { return nil },
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: fresh, Stable: true}}, nil
@@ -79,9 +81,10 @@ func TestRunner_skipsWhenUpToDate(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	r := &runner{
 		cfg:   Config{Soak: 90 * 24 * time.Hour, TestCmd: "go test ./...", Force: true},
-		goCmd:    func(string, ...string) (string, error) { return "", nil },
-		runShell: func(string, string) error { return nil },
-		git:      func(string, ...string) (string, error) { return "", nil },
+		goCmd:       func(string, ...string) (string, error) { return "", nil },
+		runShell:    func(string, string) error { return nil },
+		git:         func(string, ...string) (string, error) { return "", nil },
+		govulncheck: func(string) error { return nil },
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
