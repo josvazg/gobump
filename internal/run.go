@@ -25,6 +25,7 @@ type runner struct {
 	fetchReleases func(ctx context.Context) ([]Release, error)
 	git           func(dir string, args ...string) (string, error)
 	goCmd         func(dir string, args ...string) (string, error)
+	runShell      func(dir, cmd string) error
 }
 
 func newRunner(cfg Config, path string) *runner {
@@ -34,8 +35,9 @@ func newRunner(cfg Config, path string) *runner {
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
 			return FetchReleases(ctx, nil, "", "")
 		},
-		git:   defaultGit,
-		goCmd: defaultGoCmd,
+		git:      defaultGit,
+		goCmd:    defaultGoCmd,
+		runShell: defaultRunShell,
 	}
 }
 
@@ -44,6 +46,14 @@ func defaultGoCmd(dir string, args ...string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+func defaultRunShell(dir, command string) error {
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func (r *runner) run(ctx context.Context) int {
@@ -69,36 +79,68 @@ func (r *runner) run(ctx context.Context) int {
 	}
 	latest := LatestStable(releases)
 
+	var bumpedDirs []string
 	for _, modFile := range modFiles {
-		if code := r.processModule(modFile, latest); code != 0 {
+		bumped, code := r.processModule(modFile, latest)
+		if code != 0 {
 			return code
 		}
+		if bumped {
+			bumpedDirs = append(bumpedDirs, filepath.Dir(modFile))
+		}
 	}
+
+	if len(bumpedDirs) == 0 {
+		return 0
+	}
+
+	testDir := r.path
+	if testDir == "" {
+		testDir = "."
+	}
+	fmt.Printf("running: %s\n", r.cfg.TestCmd)
+	if err := r.runShell(testDir, r.cfg.TestCmd); err != nil {
+		fmt.Fprintf(os.Stderr, "gobump: tests failed: %v\n", err)
+		fmt.Fprintln(os.Stderr, "gobump: reverting changes")
+		r.revert(bumpedDirs)
+		return 1
+	}
+
 	return 0
 }
 
-func (r *runner) processModule(modFile string, latest *Release) int {
+// processModule updates a single go.mod. Returns (bumped, exitCode).
+func (r *runner) processModule(modFile string, latest *Release) (bool, int) {
 	current, err := ReadGoVersion(modFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: reading %s: %v\n", modFile, err)
-		return 1
+		return false, 1
 	}
 
 	should, reason := ShouldBumpGo(current, latest, r.cfg.Soak, time.Now())
 	fmt.Printf("%s: %s\n", modFile, reason)
 	if !should {
-		return 0
+		return false, 0
 	}
 
 	if err := WriteGoVersion(modFile, latest.Version); err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: updating %s: %v\n", modFile, err)
-		return 1
+		return false, 1
 	}
 
 	if _, err := r.goCmd(filepath.Dir(modFile), "mod", "tidy"); err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", filepath.Dir(modFile), err)
-		return 1
+		return false, 1
 	}
 
-	return 0
+	return true, 0
+}
+
+// revert restores go.mod and go.sum in each bumped directory via git checkout.
+func (r *runner) revert(dirs []string) {
+	for _, dir := range dirs {
+		if _, err := r.git(dir, "checkout", "--", "go.mod", "go.sum"); err != nil {
+			fmt.Fprintf(os.Stderr, "gobump: revert in %s: %v\n", dir, err)
+		}
+	}
 }

@@ -29,6 +29,8 @@ func TestRunner_runsModTidyAfterBump(t *testing.T) {
 			}
 			return "", nil
 		},
+		runShell: func(string, string) error { return nil },
+		git:      func(string, ...string) (string, error) { return "", nil },
 	}
 
 	if code := r.run(context.Background()); code != 0 {
@@ -60,6 +62,8 @@ func TestRunner_noTidyWhenNotBumped(t *testing.T) {
 			}
 			return "", nil
 		},
+		runShell: func(string, string) error { return nil },
+		git:      func(string, ...string) (string, error) { return "", nil },
 	}
 
 	r.run(context.Background())
