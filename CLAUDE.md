@@ -9,6 +9,9 @@ Write the test first, always. No production code without a failing test that dem
 One logical change per commit. Keep diffs reviewable. Commit messages follow
 `type: short description` (e.g. `feat: soak time fetcher`, `test: add modfile parser cases`).
 
+When suggesting `git commit` commands, the description line (second `-m`) must be
+**80 characters or fewer** — no exceptions. Break into a new `-m` if needed.
+
 ## Testing Strategy
 
 Combine unit tests and end-to-end tests where practical:
