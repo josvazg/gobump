@@ -18,7 +18,7 @@ func ShouldBumpGo(goModVersion string, latest *Release, soakDur time.Duration, n
 	// Normalize go.mod version to "go1.x.y" for comparison.
 	current := "go" + goModVersion
 	if compareGoVersions(current, latest.Version) >= 0 {
-		return false, fmt.Sprintf("already at %s", current)
+		return false, fmt.Sprintf("already at go %s", goModVersion)
 	}
 
 	if latest.Date.IsZero() {
@@ -32,7 +32,7 @@ func ShouldBumpGo(goModVersion string, latest *Release, soakDur time.Duration, n
 			latest.Version, age.Hours()/24, remaining.Hours()/24)
 	}
 
-	return true, fmt.Sprintf("bump go %s → %s (released %.0f days ago)", goModVersion, latest.Version, age.Hours()/24)
+	return true, fmt.Sprintf("bump go %s → %s (released %.0f days ago)", goModVersion, strings.TrimPrefix(latest.Version, "go"), age.Hours()/24)
 }
 
 // compareGoVersions compares two Go version strings, which may be in either
