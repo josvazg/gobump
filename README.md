@@ -1,5 +1,7 @@
 # gobump
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 Automates Go toolchain and dependency upgrades with safety gates, vulnerability awareness, and VCS integration.
 
 ## What it does
@@ -44,3 +46,8 @@ mage install          # install to GOPATH/bin
 ```
 
 Available mage targets: `build`, `test`, `lint`, `install`, `check`.
+
+## License
+
+Apache 2.0 — Copyright 2026 MongoDB, Inc. and the gobump contributors.
+See [LICENSE](LICENSE).
