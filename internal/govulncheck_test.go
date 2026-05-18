@@ -62,18 +62,18 @@ func TestGovulncheck_failsAndRevertsOnVulns(t *testing.T) {
 	}
 }
 
-func TestGovulncheck_skippedWhenNothingBumped(t *testing.T) {
+func TestGovulncheck_skippedWhenSoakingNotAtLatest(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/m\n\ngo 1.22.3\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/m\n\ngo 1.21.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-100 * 24 * time.Hour)
+	fresh := time.Now().Add(-10 * 24 * time.Hour)
 	called := false
 	r := &runner{
 		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true},
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
-			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
+			return []Release{{Version: "go1.22.3", Date: fresh, Stable: true}}, nil
 		},
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(string, string) error { return nil },
@@ -82,7 +82,7 @@ func TestGovulncheck_skippedWhenNothingBumped(t *testing.T) {
 	}
 	r.run(context.Background())
 	if called {
-		t.Error("govulncheck should not run when nothing was bumped")
+		t.Error("govulncheck should not run when soak blocks bump and toolchain is not at latest")
 	}
 }
 

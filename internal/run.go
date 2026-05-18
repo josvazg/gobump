@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -87,22 +88,20 @@ func (r *runner) run(ctx context.Context) int {
 		return 0
 	}
 
-	releases, err := r.fetchReleases(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gobump: fetching releases: %v\n", err)
-		return 1
-	}
-	latest := LatestStable(releases)
-
 	var bumpedDirs []string
 	for _, modFile := range modFiles {
-		bumped, code := r.processModule(modFile, latest)
-		if bumped {
-			bumpedDirs = append(bumpedDirs, filepath.Dir(modFile))
-		}
+		dir := filepath.Dir(modFile)
+		dirty, code := r.processModule(ctx, modFile)
 		if code != 0 {
-			r.revert(bumpedDirs)
+			rev := append([]string{}, bumpedDirs...)
+			if dirty {
+				rev = append(rev, dir)
+			}
+			r.revert(rev)
 			return code
+		}
+		if dirty {
+			bumpedDirs = append(bumpedDirs, dir)
 		}
 	}
 
@@ -135,22 +134,97 @@ func (r *runner) run(ctx context.Context) int {
 	return r.finalize(bumpedDirs)
 }
 
-// processModule updates a single go.mod. Returns (bumped, exitCode).
-func (r *runner) processModule(modFile string, latest *Release) (bool, int) {
+func readModSumBytes(modDir string) (mod, sum []byte) {
+	mod, _ = os.ReadFile(filepath.Join(modDir, "go.mod"))
+	sumPath := filepath.Join(modDir, "go.sum")
+	b, err := os.ReadFile(sumPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return mod, nil
+		}
+		return mod, nil
+	}
+	return mod, b
+}
+
+func modSnapChanged(modDir string, origMod, origSum []byte) bool {
+	m, s := readModSumBytes(modDir)
+	return !bytes.Equal(m, origMod) || !bytes.Equal(s, origSum)
+}
+
+// runGovulncheckGate runs govulncheck; on failure it refetches stable releases and,
+// if a newer patch exists, bumps the go directive and runs govulncheck again.
+func (r *runner) runGovulncheckGate(ctx context.Context, modFile, modDir string) error {
+	if r.shouldSkip("govulncheck") {
+		return nil
+	}
+	firstErr := r.govulncheck(modDir)
+	if firstErr == nil {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "gobump: vulnerabilities found in %s: %v\n", modDir, firstErr)
+
+	releases, err := r.fetchReleases(ctx)
+	if err != nil {
+		return fmt.Errorf("refetching releases after govulncheck failure: %w", err)
+	}
+	L2 := LatestStable(releases)
+	if L2 == nil {
+		return fmt.Errorf("no stable Go release information after refetch")
+	}
+	cur, err := ReadGoVersion(modFile)
+	if err != nil {
+		return err
+	}
+	if compareGoVersions(L2.Version, "go"+cur) <= 0 {
+		fmt.Fprintln(os.Stderr, "gobump: govulncheck still failing; no newer Go patch — library updates not yet automated (fix manually)")
+		return fmt.Errorf("govulncheck")
+	}
+	fmt.Fprintf(os.Stderr, "gobump: retrying with newer Go patch %s\n", strings.TrimPrefix(L2.Version, "go"))
+	if err := WriteGoVersion(modFile, L2.Version); err != nil {
+		return err
+	}
+	if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
+		return fmt.Errorf("go mod tidy in %s: %w", modDir, err)
+	}
+	if err := r.govulncheck(modDir); err != nil {
+		fmt.Fprintln(os.Stderr, "gobump: govulncheck failed after patch bump — library updates not yet automated (fix manually)")
+		return err
+	}
+	return nil
+}
+
+// processModule updates a single go.mod when appropriate. It returns (dirty, exitCode)
+// where dirty means go.mod or go.sum differs from the tree before this call.
+func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool, code int) {
+	modDir := filepath.Dir(modFile)
+	origMod, origSum := readModSumBytes(modDir)
+	dirtyNow := func() bool { return modSnapChanged(modDir, origMod, origSum) }
+
 	current, err := ReadGoVersion(modFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: reading %s: %v\n", modFile, err)
-		return false, 1
+		return dirtyNow(), 1
 	}
 
+	releases, err := r.fetchReleases(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gobump: fetching releases: %v\n", err)
+		return dirtyNow(), 1
+	}
+	latest := LatestStable(releases)
+
 	should, reason := ShouldBumpGo(current, latest, r.cfg.Soak, time.Now())
-	if should && r.shouldSkip("major") && isMajorBump(current, latest.Version) {
+	if should && latest != nil && r.shouldSkip("major") && isMajorBump(current, latest.Version) {
 		fmt.Printf("%s: skipping cross-minor bump %s → %s (-skip=major)\n",
 			modFile, current, strings.TrimPrefix(latest.Version, "go"))
 		return false, 0
 	}
 	fmt.Printf("%s: %s\n", modFile, reason)
-	if !should {
+
+	atLatest := latest != nil && compareGoVersions("go"+current, latest.Version) >= 0
+	wantBump := should
+	if !wantBump && !atLatest {
 		return false, 0
 	}
 
@@ -158,29 +232,37 @@ func (r *runner) processModule(modFile string, latest *Release) (bool, int) {
 		return false, 0
 	}
 
-	if err := WriteGoVersion(modFile, latest.Version); err != nil {
-		fmt.Fprintf(os.Stderr, "gobump: updating %s: %v\n", modFile, err)
-		return false, 1
+	if wantBump {
+		if latest == nil {
+			fmt.Fprintln(os.Stderr, "gobump: no stable release to bump to")
+			return dirtyNow(), 1
+		}
+		if err := WriteGoVersion(modFile, latest.Version); err != nil {
+			fmt.Fprintf(os.Stderr, "gobump: updating %s: %v\n", modFile, err)
+			return dirtyNow(), 1
+		}
+		if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
+			fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
+			return dirtyNow(), 1
+		}
+		if err := r.runGovulncheckGate(ctx, modFile, modDir); err != nil {
+			return dirtyNow(), 1
+		}
+		return dirtyNow(), 0
 	}
 
-	modDir := filepath.Dir(modFile)
-
+	// Toolchain already matches latest stable: still tidy + govulncheck, then optional patch retry.
+	if r.shouldSkip("govulncheck") {
+		return dirtyNow(), 0
+	}
 	if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
-		return true, 1
+		return dirtyNow(), 1
 	}
-
-	if !r.shouldSkip("govulncheck") {
-		if err := r.govulncheck(modDir); err != nil {
-			fmt.Fprintf(os.Stderr,
-				"gobump: vulnerabilities found in %s: %v\n", modDir, err)
-			fmt.Fprintf(os.Stderr,
-				"gobump: library updates not yet automated — fix manually\n")
-			return true, 1
-		}
+	if err := r.runGovulncheckGate(ctx, modFile, modDir); err != nil {
+		return dirtyNow(), 1
 	}
-
-	return true, 0
+	return dirtyNow(), 0
 }
 
 // revert restores go.mod and go.sum in each bumped directory via git checkout.
