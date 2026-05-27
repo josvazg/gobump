@@ -22,8 +22,9 @@ func skipRunner(t *testing.T, goVersion, latestVersion string, cfg Config) (*run
 	}
 	cfg.Soak = 90 * 24 * time.Hour
 	r := &runner{
-		cfg:  cfg,
-		path: dir,
+		cfg:       cfg,
+		skipSteps: parseSkip(cfg.Skip),
+		path:      dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: latestVersion, Date: old, Stable: true}}, nil
 		},

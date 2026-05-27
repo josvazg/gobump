@@ -24,6 +24,7 @@ func Run(ctx context.Context, args []string, env func(string) string) int {
 type runner struct {
 	cfg           Config
 	path          string
+	skipSteps     map[string]bool
 	fetchReleases func(ctx context.Context) ([]Release, error)
 	git           func(dir string, args ...string) (string, error)
 	goCmd         func(dir string, args ...string) (string, error)
@@ -31,10 +32,21 @@ type runner struct {
 	govulncheck   func(dir string) error
 }
 
+func parseSkip(s string) map[string]bool {
+	m := make(map[string]bool)
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			m[p] = true
+		}
+	}
+	return m
+}
+
 func newRunner(cfg Config, path string) *runner {
 	return &runner{
-		cfg:  cfg,
-		path: path,
+		cfg:       cfg,
+		path:      path,
+		skipSteps: parseSkip(cfg.Skip),
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
 			return FetchReleases(ctx, nil, "", "")
 		},
@@ -48,13 +60,7 @@ func newRunner(cfg Config, path string) *runner {
 }
 
 func (r *runner) shouldSkip(step string) bool {
-	for _, s := range strings.Split(r.cfg.Skip, ",") {
-		s = strings.TrimSpace(s)
-		if s == "all" || s == step {
-			return true
-		}
-	}
-	return false
+	return r.skipSteps["all"] || r.skipSteps[step]
 }
 
 func defaultGoCmd(dir string, args ...string) (string, error) {

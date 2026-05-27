@@ -18,8 +18,9 @@ func vulnRunner(t *testing.T, vulnErr error, skip string) (*runner, *bool) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	called := false
 	r := &runner{
-		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true, TestCmd: "echo ok", Skip: skip},
-		path: dir,
+		cfg:       Config{Soak: 90 * 24 * time.Hour, Force: true, TestCmd: "echo ok", Skip: skip},
+		skipSteps: parseSkip(skip),
+		path:      dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},

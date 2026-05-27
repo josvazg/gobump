@@ -25,7 +25,8 @@ func customRunner(t *testing.T, custom, skip string) (*runner, *[]string) {
 			Custom:  custom,
 			Skip:    skip,
 		},
-		path: dir,
+		skipSteps: parseSkip(skip),
+		path:      dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
