@@ -42,6 +42,13 @@ func parseSkip(s string) map[string]bool {
 	return m
 }
 
+func (r *runner) rootDir() string {
+	if r.path == "" {
+		return "."
+	}
+	return r.path
+}
+
 func newRunner(cfg Config, path string) *runner {
 	return &runner{
 		cfg:       cfg,
@@ -115,14 +122,9 @@ func (r *runner) run(ctx context.Context) int {
 		return 0
 	}
 
-	rootDir := r.path
-	if rootDir == "" {
-		rootDir = "."
-	}
-
 	if r.cfg.Custom != "" && !r.shouldSkip("custom") {
 		fmt.Printf("running: %s\n", r.cfg.Custom)
-		if err := r.runShell(rootDir, r.cfg.Custom); err != nil {
+		if err := r.runShell(r.rootDir(), r.cfg.Custom); err != nil {
 			fmt.Fprintf(os.Stderr, "gobump: custom command failed: %v\n", err)
 			r.revert(bumpedDirs)
 			return 1
@@ -130,7 +132,7 @@ func (r *runner) run(ctx context.Context) int {
 	}
 
 	fmt.Printf("running: %s\n", r.cfg.TestCmd)
-	if err := r.runShell(rootDir, r.cfg.TestCmd); err != nil {
+	if err := r.runShell(r.rootDir(), r.cfg.TestCmd); err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: tests failed: %v\n", err)
 		fmt.Fprintln(os.Stderr, "gobump: reverting changes")
 		r.revert(bumpedDirs)
