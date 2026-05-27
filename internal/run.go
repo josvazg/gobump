@@ -219,8 +219,8 @@ func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool,
 	}
 	latest := LatestStable(releases)
 
-	should, reason := ShouldBumpGo(current, latest, r.cfg.Soak, time.Now())
-	if should && latest != nil && r.shouldSkip("major") && isMajorBump(current, latest.Version) {
+	needsPatch, reason := ShouldBumpGo(current, latest, r.cfg.Soak, time.Now())
+	if needsPatch && latest != nil && r.shouldSkip("major") && isMajorBump(current, latest.Version) {
 		fmt.Printf("%s: skipping cross-minor bump %s → %s (-skip=major)\n",
 			modFile, current, strings.TrimPrefix(latest.Version, "go"))
 		return false, 0
@@ -228,20 +228,14 @@ func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool,
 	fmt.Printf("%s: %s\n", modFile, reason)
 
 	atLatest := latest != nil && compareGoVersions("go"+current, latest.Version) >= 0
-	wantBump := should
-	if !wantBump && !atLatest {
+	soaking := !needsPatch && !atLatest
+
+	if soaking || r.cfg.DryRun {
 		return false, 0
 	}
 
-	if r.cfg.DryRun {
-		return false, 0
-	}
-
-	if wantBump {
-		if latest == nil {
-			fmt.Fprintln(os.Stderr, "gobump: no stable release to bump to")
-			return dirtyNow(), 1
-		}
+	switch {
+	case needsPatch:
 		if err := WriteGoVersion(modFile, latest.Version); err != nil {
 			fmt.Fprintf(os.Stderr, "gobump: updating %s: %v\n", modFile, err)
 			return dirtyNow(), 1
@@ -253,19 +247,17 @@ func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool,
 		if err := r.runGovulncheckGate(ctx, modFile, modDir); err != nil {
 			return dirtyNow(), 1
 		}
-		return dirtyNow(), 0
-	}
-
-	// Toolchain already matches latest stable: still tidy + govulncheck, then optional patch retry.
-	if r.shouldSkip("govulncheck") {
-		return dirtyNow(), 0
-	}
-	if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
-		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
-		return dirtyNow(), 1
-	}
-	if err := r.runGovulncheckGate(ctx, modFile, modDir); err != nil {
-		return dirtyNow(), 1
+	default: // atLatest: health-check tidy + govulncheck without a version change
+		if r.shouldSkip("govulncheck") {
+			return dirtyNow(), 0
+		}
+		if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
+			fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
+			return dirtyNow(), 1
+		}
+		if err := r.runGovulncheckGate(ctx, modFile, modDir); err != nil {
+			return dirtyNow(), 1
+		}
 	}
 	return dirtyNow(), 0
 }
