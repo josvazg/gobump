@@ -139,9 +139,6 @@ func readModSumBytes(modDir string) (mod, sum []byte) {
 	sumPath := filepath.Join(modDir, "go.sum")
 	b, err := os.ReadFile(sumPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return mod, nil
-		}
 		return mod, nil
 	}
 	return mod, b
