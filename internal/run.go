@@ -43,10 +43,11 @@ func parseSkip(s string) map[string]bool {
 }
 
 func (r *runner) rootDir() string {
-	if r.path == "" {
+	dir := strings.TrimSuffix(r.path, "/...")
+	if dir == "" {
 		return "."
 	}
-	return r.path
+	return dir
 }
 
 func newRunner(cfg Config, path string, env func(string) string) *runner {

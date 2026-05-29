@@ -14,10 +14,7 @@ func (r *runner) checkGitEnv() error {
 		return nil
 	}
 
-	dir := r.path
-	if dir == "" {
-		dir = "."
-	}
+	dir := r.rootDir()
 
 	out, err := r.git(dir, "status", "--porcelain")
 	if err != nil {
