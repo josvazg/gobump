@@ -43,7 +43,7 @@ Flags:
 
 ## Development
 
-Requires [devbox](https://www.jetify.com/devbox). All tools (Go, govulncheck, golangci-lint, goreleaser, mage) are pinned in `devbox.json`.
+Requires [devbox](https://www.jetify.com/devbox). All tools (Go, govulncheck, golangci-lint, mage) are pinned in `devbox.json`.
 
 ```sh
 devbox shell          # enter the dev environment

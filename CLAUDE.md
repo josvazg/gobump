@@ -39,7 +39,7 @@ All logic lives in `internal/`. The runner receives:
 
 ## Development Environment
 
-Use **devbox** for all tooling — `devbox shell` gives a reproducible env with Go, govulncheck, golangci-lint, mage, and goreleaser pinned in `devbox.json`.
+Use **devbox** for all tooling — `devbox shell` gives a reproducible env with Go, govulncheck, golangci-lint, and mage pinned in `devbox.json`.
 
 Use **mage** as the task runner. Prefer `mage <target>` over raw `go` commands so the full pipeline (test → lint → build) is consistent:
 

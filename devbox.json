@@ -5,7 +5,6 @@
     "govulncheck@latest",
     "golangci-lint@latest",
     "mage@latest",
-    "goreleaser@latest",
     "git@latest"
   ],
   "shell": {
@@ -16,8 +15,7 @@
       "build": "go build -o gobump .",
       "test": "go test ./...",
       "lint": "golangci-lint run ./...",
-      "install": "go install .",
-      "release": "goreleaser release --snapshot --clean"
+      "install": "go install ."
     }
   }
 }
