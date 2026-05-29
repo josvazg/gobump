@@ -64,12 +64,12 @@ Use **mage** as the task runner. Prefer `mage <target>` over raw `go` commands s
 | `mage test` | `go test ./...` |
 | `mage build` | builds `./gobump` |
 | `mage lint` | `golangci-lint run ./...` |
-| `mage check` | test then lint (the CI gate) |
+| `mage ci` | build → test → lint (the CI gate) |
 | `mage install` | `go install .` |
 
 ## Safety First
 
-1. **Test before commit** — `go test ./...` must pass before any `git commit`.
+1. **Test before commit** — `mage ci` must pass before any `git commit`.
 2. **Commit locally before push or PR** — never push uncommitted or dirty state.
 3. Branch protection and dirty-tree checks are enforced by the tool itself; respect
    the same discipline when developing it.

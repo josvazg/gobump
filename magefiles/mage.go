@@ -27,12 +27,7 @@ func Install() error {
 	return sh.Run("go", "install", ".")
 }
 
-// Check runs Test then Lint (local gate).
-func Check() {
-	mg.SerialDeps(Test, Lint)
-}
-
 // CI runs the full pipeline: Build, Test, and Lint in sequence.
 func CI() {
-	mg.SerialDeps(Build, Check)
+	mg.SerialDeps(Build, Test, Lint)
 }
