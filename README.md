@@ -45,10 +45,10 @@ Flags:
 
 ## Development
 
-Requires [devbox](https://www.jetify.com/devbox). All tools (Go, govulncheck, golangci-lint, mage) are pinned in `devbox.json`.
+Requires [Nix](https://nixos.org/) with flakes enabled. All tools (Go, govulncheck, golangci-lint, mage) are pinned in `flake.lock`.
 
 ```sh
-devbox shell          # enter the dev environment
+nix develop           # enter the dev environment
 mage test             # run tests
 mage build            # build ./gobump
 mage ci               # build + test + lint (CI gate)
