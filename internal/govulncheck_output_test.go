@@ -89,6 +89,90 @@ func TestParseVulnReport(t *testing.T) {
 	}
 }
 
+func TestVulnReport_HasStdlib(t *testing.T) {
+	tests := []struct {
+		name     string
+		findings []Finding
+		want     bool
+	}{
+		{"no findings", nil, false},
+		{"only stdlib", []Finding{{Module: "stdlib"}}, true},
+		{"only library", []Finding{{Module: "golang.org/x/net"}}, false},
+		{"mixed", []Finding{{Module: "golang.org/x/net"}, {Module: "stdlib"}}, true},
+	}
+	for _, tc := range tests {
+		r := VulnReport{Findings: tc.findings}
+		if got := r.HasStdlib(); got != tc.want {
+			t.Errorf("%s: HasStdlib() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestVulnReport_LibFindings(t *testing.T) {
+	tests := []struct {
+		name     string
+		findings []Finding
+		want     map[string]string
+	}{
+		{
+			name:     "empty",
+			findings: nil,
+			want:     map[string]string{},
+		},
+		{
+			name:     "stdlib excluded",
+			findings: []Finding{{Module: "stdlib", FixedVersion: "go1.21.1"}},
+			want:     map[string]string{},
+		},
+		{
+			name:     "single library",
+			findings: []Finding{{Module: "golang.org/x/net", FixedVersion: "v0.18.0"}},
+			want:     map[string]string{"golang.org/x/net": "v0.18.0"},
+		},
+		{
+			name: "same module deduplicated — highest wins",
+			findings: []Finding{
+				{Module: "golang.org/x/net", FixedVersion: "v0.17.0"},
+				{Module: "golang.org/x/net", FixedVersion: "v0.18.0"},
+			},
+			want: map[string]string{"golang.org/x/net": "v0.18.0"},
+		},
+		{
+			name: "multiple modules",
+			findings: []Finding{
+				{Module: "golang.org/x/net", FixedVersion: "v0.18.0"},
+				{Module: "github.com/foo/bar", FixedVersion: "v1.2.3"},
+			},
+			want: map[string]string{
+				"golang.org/x/net":   "v0.18.0",
+				"github.com/foo/bar": "v1.2.3",
+			},
+		},
+		{
+			name: "stdlib mixed with library — stdlib excluded",
+			findings: []Finding{
+				{Module: "stdlib", FixedVersion: "go1.21.1"},
+				{Module: "golang.org/x/net", FixedVersion: "v0.18.0"},
+			},
+			want: map[string]string{"golang.org/x/net": "v0.18.0"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := VulnReport{Findings: tc.findings}
+			got := r.LibFindings()
+			if len(got) != len(tc.want) {
+				t.Fatalf("LibFindings() = %v, want %v", got, tc.want)
+			}
+			for mod, ver := range tc.want {
+				if got[mod] != ver {
+					t.Errorf("LibFindings()[%q] = %q, want %q", mod, got[mod], ver)
+				}
+			}
+		})
+	}
+}
+
 func TestFinding_IsStdlib(t *testing.T) {
 	tests := []struct {
 		module string

@@ -38,7 +38,11 @@ func TestGovulncheck_retriesAfterNewerPatchFromRefetch(t *testing.T) {
 		govulncheck: func(string) (VulnReport, error) {
 			v := vulnCalls.Add(1)
 			if v == 1 {
-				return VulnReport{}, errors.New("vuln on first check")
+				report := VulnReport{Findings: []Finding{{
+					OSV: "GO-2023-1988", Module: "stdlib",
+					Package: "net/http", FixedVersion: "go1.22.4",
+				}}}
+				return report, errors.New("vuln on first check")
 			}
 			return VulnReport{}, nil
 		},

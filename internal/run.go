@@ -156,43 +156,70 @@ func modSnapChanged(modDir string, origMod, origSum []byte) bool {
 	return !bytes.Equal(m, origMod) || !bytes.Equal(s, origSum)
 }
 
-// runGovulncheckGate runs govulncheck; on failure it refetches stable releases and,
-// if a newer patch exists, bumps the go directive and runs govulncheck again.
+// runGovulncheckGate runs govulncheck and attempts automated fixes:
+//   - library findings: go get module@fixedVersion + go mod tidy
+//   - stdlib findings: bump go directive to latest patch + go mod tidy
+//
+// If any fix was applied, govulncheck is re-run to confirm clean.
 func (r *runner) runGovulncheckGate(ctx context.Context, modFile, modDir string) error {
 	if r.shouldSkip("govulncheck") {
 		return nil
 	}
-	_, firstErr := r.govulncheck(modDir)
+	report, firstErr := r.govulncheck(modDir)
 	if firstErr == nil {
 		return nil
 	}
 	fmt.Fprintf(os.Stderr, "gobump: vulnerabilities found in %s: %v\n", modDir, firstErr)
 
-	releases, err := r.fetchReleases(ctx)
-	if err != nil {
-		return fmt.Errorf("refetching releases after govulncheck failure: %w", err)
+	anyFixed := false
+
+	// Fix library findings: go get module@fixedVersion.
+	if libs := report.LibFindings(); len(libs) > 0 {
+		for mod, ver := range libs {
+			fmt.Fprintf(os.Stderr, "gobump: bumping library %s to %s\n", mod, ver)
+			if _, err := r.goCmd(modDir, "get", mod+"@"+ver); err != nil {
+				return fmt.Errorf("go get %s@%s: %w", mod, ver, err)
+			}
+		}
+		if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
+			return fmt.Errorf("go mod tidy in %s: %w", modDir, err)
+		}
+		anyFixed = true
 	}
-	L2 := LatestStable(releases)
-	if L2 == nil {
-		return fmt.Errorf("no stable Go release information after refetch")
+
+	// Fix stdlib findings: bump go directive if a newer patch is available.
+	if report.HasStdlib() {
+		releases, err := r.fetchReleases(ctx)
+		if err != nil {
+			return fmt.Errorf("refetching releases after govulncheck failure: %w", err)
+		}
+		L2 := LatestStable(releases)
+		if L2 == nil {
+			return fmt.Errorf("no stable Go release information after refetch")
+		}
+		cur, err := ReadGoVersion(modFile)
+		if err != nil {
+			return err
+		}
+		if compareGoVersions(L2.Version, "go"+cur) > 0 {
+			fmt.Fprintf(os.Stderr, "gobump: retrying with newer Go patch %s\n", strings.TrimPrefix(L2.Version, "go"))
+			if err := WriteGoVersion(modFile, L2.Version); err != nil {
+				return err
+			}
+			if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
+				return fmt.Errorf("go mod tidy in %s: %w", modDir, err)
+			}
+			anyFixed = true
+		}
 	}
-	cur, err := ReadGoVersion(modFile)
-	if err != nil {
-		return err
-	}
-	if compareGoVersions(L2.Version, "go"+cur) <= 0 {
-		fmt.Fprintln(os.Stderr, "gobump: govulncheck still failing; no newer Go patch — library updates not yet automated (fix manually)")
+
+	if !anyFixed {
+		fmt.Fprintln(os.Stderr, "gobump: govulncheck still failing; no automated fix available (fix manually)")
 		return fmt.Errorf("govulncheck")
 	}
-	fmt.Fprintf(os.Stderr, "gobump: retrying with newer Go patch %s\n", strings.TrimPrefix(L2.Version, "go"))
-	if err := WriteGoVersion(modFile, L2.Version); err != nil {
-		return err
-	}
-	if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
-		return fmt.Errorf("go mod tidy in %s: %w", modDir, err)
-	}
+
 	if _, err := r.govulncheck(modDir); err != nil {
-		fmt.Fprintln(os.Stderr, "gobump: govulncheck failed after patch bump — library updates not yet automated (fix manually)")
+		fmt.Fprintln(os.Stderr, "gobump: govulncheck failed after automated fix (fix manually)")
 		return err
 	}
 	return nil

@@ -26,6 +26,32 @@ func (f Finding) IsStdlib() bool {
 	return f.Module == "stdlib"
 }
 
+// HasStdlib reports whether any finding is in the standard library.
+func (r VulnReport) HasStdlib() bool {
+	for _, f := range r.Findings {
+		if f.IsStdlib() {
+			return true
+		}
+	}
+	return false
+}
+
+// LibFindings returns a module→fixedVersion map for non-stdlib findings.
+// When the same module appears multiple times the lexicographically greatest
+// fixed version is kept (works correctly for semver strings sharing a major.minor).
+func (r VulnReport) LibFindings() map[string]string {
+	m := make(map[string]string)
+	for _, f := range r.Findings {
+		if f.IsStdlib() {
+			continue
+		}
+		if cur, ok := m[f.Module]; !ok || f.FixedVersion > cur {
+			m[f.Module] = f.FixedVersion
+		}
+	}
+	return m
+}
+
 // parseVulnReport parses govulncheck -json output from r.
 // Non-finding lines (config, progress) are silently skipped.
 // Findings with an empty trace are skipped.
