@@ -20,6 +20,22 @@ Combine unit tests and end-to-end tests where practical:
   `go.mod` / `go.sum` files, a bare git repo, and stubbed external commands
   (`govulncheck`, `git push`). No mocking frameworks; use real files and processes.
 
+Prefer **table-driven tests** when two or more cases share the same structure. Collapse
+them into one `Test*` function with a `tests := []struct{...}` slice and a
+`for _, tc := range tests { t.Run(tc.name, ...) }` loop. One top-level function per
+behaviour, not one per scenario.
+
+## Test File Layout
+
+Order test files **top-to-bottom from high abstraction to low detail**:
+
+1. `Test*` functions first — the reader sees what the code does before how it's set up.
+2. Helper types and their methods next (`fakeWorld`, etc.).
+3. Constructor/setup functions after that (`newFakeWorld`, etc.).
+4. Primitive helpers last (`gitRun`, `write`, etc.).
+
+Never put helpers above the tests that use them.
+
 ## Architecture: Thin `main`
 
 `main.go` does exactly three things:

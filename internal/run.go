@@ -18,7 +18,7 @@ func Run(ctx context.Context, args []string, env func(string) string) int {
 		fmt.Fprintf(os.Stderr, "gobump: %v\n", err)
 		return 1
 	}
-	return newRunner(cfg, path).run(ctx)
+	return newRunner(cfg, path, env).run(ctx)
 }
 
 type runner struct {
@@ -49,13 +49,13 @@ func (r *runner) rootDir() string {
 	return r.path
 }
 
-func newRunner(cfg Config, path string) *runner {
+func newRunner(cfg Config, path string, env func(string) string) *runner {
 	return &runner{
 		cfg:       cfg,
 		path:      path,
 		skipSteps: parseSkip(cfg.Skip),
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
-			return FetchReleases(ctx, nil, "", "")
+			return FetchReleases(ctx, nil, env("GOBUMP_DL_URL"), env("GOBUMP_COMMIT_URL"))
 		},
 		git:      defaultGit,
 		goCmd:    defaultGoCmd,
