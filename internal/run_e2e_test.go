@@ -21,7 +21,7 @@ func TestRunner_bumpsGoVersion(t *testing.T) {
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(string, string) error { return nil },
 		git:         func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error { return nil },
+		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
@@ -54,7 +54,7 @@ func TestRunner_skipsWhenSoaking(t *testing.T) {
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(string, string) error { return nil },
 		git:         func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error { return nil },
+		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: fresh, Stable: true}}, nil
@@ -84,7 +84,7 @@ func TestRunner_skipsWhenUpToDate(t *testing.T) {
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(string, string) error { return nil },
 		git:         func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error { return nil },
+		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil

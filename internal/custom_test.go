@@ -31,7 +31,7 @@ func customRunner(t *testing.T, custom, skip string) (*runner, *[]string) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error { return nil },
+		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		git:         func(string, ...string) (string, error) { return "", nil },
 		runShell: func(_, cmd string) error {
 			shellCmds = append(shellCmds, cmd)
@@ -82,7 +82,7 @@ func TestCustom_skippedWhenNothingBumped(t *testing.T) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error { return nil },
+		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		git:         func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(_, cmd string) error { customRan = customRan || cmd == "make generate"; return nil },
 	}

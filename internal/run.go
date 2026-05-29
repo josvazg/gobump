@@ -29,7 +29,7 @@ type runner struct {
 	git           func(dir string, args ...string) (string, error)
 	goCmd         func(dir string, args ...string) (string, error)
 	runShell      func(dir, cmd string) error
-	govulncheck   func(dir string) error
+	govulncheck   func(dir string) (VulnReport, error)
 }
 
 func parseSkip(s string) map[string]bool {
@@ -61,9 +61,7 @@ func newRunner(cfg Config, path string, env func(string) string) *runner {
 		git:      defaultGit,
 		goCmd:    defaultGoCmd,
 		runShell: defaultRunShell,
-		govulncheck: func(dir string) error {
-			return defaultRunShell(dir, "govulncheck ./...")
-		},
+		govulncheck: defaultGovulncheck,
 	}
 }
 
@@ -164,7 +162,7 @@ func (r *runner) runGovulncheckGate(ctx context.Context, modFile, modDir string)
 	if r.shouldSkip("govulncheck") {
 		return nil
 	}
-	firstErr := r.govulncheck(modDir)
+	_, firstErr := r.govulncheck(modDir)
 	if firstErr == nil {
 		return nil
 	}
@@ -193,7 +191,7 @@ func (r *runner) runGovulncheckGate(ctx context.Context, modFile, modDir string)
 	if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
 		return fmt.Errorf("go mod tidy in %s: %w", modDir, err)
 	}
-	if err := r.govulncheck(modDir); err != nil {
+	if _, err := r.govulncheck(modDir); err != nil {
 		fmt.Fprintln(os.Stderr, "gobump: govulncheck failed after patch bump — library updates not yet automated (fix manually)")
 		return err
 	}

@@ -27,9 +27,9 @@ func vulnRunner(t *testing.T, vulnErr error, skip string) (*runner, *bool) {
 		goCmd:    func(string, ...string) (string, error) { return "", nil },
 		runShell: func(string, string) error { return nil },
 		git:      func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error {
+		govulncheck: func(string) (VulnReport, error) {
 			called = true
-			return vulnErr
+			return VulnReport{}, vulnErr
 		},
 	}
 	return r, &called
@@ -79,7 +79,7 @@ func TestGovulncheck_skippedWhenSoakingNotAtLatest(t *testing.T) {
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(string, string) error { return nil },
 		git:         func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error { called = true; return nil },
+		govulncheck: func(string) (VulnReport, error) { called = true; return VulnReport{}, nil },
 	}
 	r.run(context.Background())
 	if called {

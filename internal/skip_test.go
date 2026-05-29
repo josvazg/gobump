@@ -29,7 +29,7 @@ func skipRunner(t *testing.T, goVersion, latestVersion string, cfg Config) (*run
 			return []Release{{Version: latestVersion, Date: old, Stable: true}}, nil
 		},
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error { return nil },
+		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		runShell:    func(string, string) error { return nil },
 		git:         func(string, ...string) (string, error) { return "", nil },
 	}

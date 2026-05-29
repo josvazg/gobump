@@ -35,12 +35,12 @@ func TestGovulncheck_retriesAfterNewerPatchFromRefetch(t *testing.T) {
 			return nil
 		},
 		git: func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error {
+		govulncheck: func(string) (VulnReport, error) {
 			v := vulnCalls.Add(1)
 			if v == 1 {
-				return errors.New("vuln on first check")
+				return VulnReport{}, errors.New("vuln on first check")
 			}
-			return nil
+			return VulnReport{}, nil
 		},
 	}
 
@@ -78,9 +78,9 @@ func TestGovulncheck_runsWhenToolchainAlreadyLatest(t *testing.T) {
 		goCmd:    func(string, ...string) (string, error) { return "", nil },
 		runShell: func(string, string) error { return nil },
 		git:      func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) error {
+		govulncheck: func(string) (VulnReport, error) {
 			vulnCalls.Add(1)
-			return nil
+			return VulnReport{}, nil
 		},
 	}
 
