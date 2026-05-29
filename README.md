@@ -2,15 +2,17 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Automates Go toolchain bumps with soak-time rules, vulnerability checks, and optional VCS integration. **Automatic library upgrades are planned**; today the tool focuses on the `go` directive and failing loudly when `govulncheck` reports issues.
+Automates Go toolchain and dependency bumps with soak-time rules, vulnerability checks, and optional VCS integration.
 
 ## What it does
 
-- **Scans modules recursively:** walks the directory tree under the given path (default `.`) and finds every `go.mod`, skipping `vendor/`. There is no separate non-recursive mode yet; pointing gobump at `.` means “all nested modules under this root.”
-- **Soak time for the toolchain:** reads stable releases from [go.dev/dl](https://go.dev/dl/) (JSON) and uses GitHub commit metadata to date the `x.y.0` tag line so `gobump` only bumps the `go` directive after your configured soak window (default 90 days).
+- **Scans modules:** by default processes only the `go.mod` in the given directory. Append `/...` to the path (e.g. `./...`) to walk the full subtree, skipping `vendor/` directories.
+- **Soak time for the toolchain:** reads stable releases from [go.dev/dl](https://go.dev/dl/) (JSON) and uses GitHub commit metadata to date the `x.y.0` tag, so gobump only bumps the `go` directive after your configured soak window (default 90 days).
 - **`go` directive bump:** updates `go` in each discovered `go.mod` when the latest stable release satisfies soak (and optional `-skip=major` rules). Runs `go mod tidy` afterward.
-- **Vulnerability gate:** runs `go mod tidy` and `govulncheck ./...` when the `go` line already matches latest stable **or** after a soak-driven bump (unless `-skip=govulncheck`). If `govulncheck` fails, gobump **refetches** release metadata; when a **newer stable patch** exists, it bumps the `go` directive to that patch, tidies, and runs `govulncheck` again. If there is **no** newer Go patch (or the second run still fails), the run **fails** and `go.mod` / `go.sum` are reverted—likely a **dependency** issue; automatic library bumps are not implemented yet.
-- **Roadmap:** parse `govulncheck` findings and apply safe `go get` upgrades for third-party modules; optional policy for crossing a new **minor** Go line early when only a toolchain fix addresses the finding.
+- **Vulnerability gate:** runs `go mod tidy` and `govulncheck ./...` when the `go` line already matches latest stable **or** after a soak-driven bump (unless `-skip=govulncheck`). Govulncheck output is parsed as structured JSON to distinguish finding types:
+  - **Library findings** (third-party modules): gobump runs `go get module@fixedVersion` for each affected dependency and then `go mod tidy`.
+  - **Stdlib / toolchain findings:** gobump refetches release metadata; if a strictly newer stable patch exists, it bumps the `go` directive, tidies, and re-runs govulncheck.
+  - After any automated fix, govulncheck is re-run to confirm clean. If no fix is possible (no newer Go patch, no library fix version) or the re-run still fails, the run **fails** and `go.mod` / `go.sum` are reverted.
 - **Validates** with your `-test` command (default `go test ./...`) before any `-push`.
 - **Optionally** commits, pushes, and runs a `-pr` shell command—or rolls back `go.mod` / `go.sum` on failure.
 
@@ -49,11 +51,11 @@ Requires [devbox](https://www.jetify.com/devbox). All tools (Go, govulncheck, go
 devbox shell          # enter the dev environment
 mage test             # run tests
 mage build            # build ./gobump
-mage check            # test + lint (CI gate)
+mage ci               # build + test + lint (CI gate)
 mage install          # install to GOPATH/bin
 ```
 
-Available mage targets: `build`, `test`, `lint`, `install`, `check`.
+Available mage targets: `build`, `test`, `lint`, `install`, `ci`.
 
 ## License
 
