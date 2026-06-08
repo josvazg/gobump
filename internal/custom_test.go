@@ -20,7 +20,6 @@ func customRunner(t *testing.T, custom, skip string) (*runner, *[]string) {
 	r := &runner{
 		cfg: Config{
 			Soak:    90 * 24 * time.Hour,
-			Force:   true,
 			TestCmd: "echo ok",
 			Custom:  custom,
 			Skip:    skip,
@@ -32,7 +31,6 @@ func customRunner(t *testing.T, custom, skip string) (*runner, *[]string) {
 		},
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
-		git:         func(string, ...string) (string, error) { return "", nil },
 		runShell: func(_, cmd string) error {
 			shellCmds = append(shellCmds, cmd)
 			return nil
@@ -76,14 +74,13 @@ func TestCustom_skippedWhenNothingBumped(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	var customRan bool
 	r := &runner{
-		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true, Custom: "make generate"},
+		cfg:  Config{Soak: 90 * 24 * time.Hour, Custom: "make generate"},
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
-		git:         func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(_, cmd string) error { customRan = customRan || cmd == "make generate"; return nil },
 	}
 	r.run(context.Background())
@@ -102,7 +99,7 @@ func TestCustom_skippedByFlag(t *testing.T) {
 	}
 }
 
-func TestCustom_failureRevertsAndExits(t *testing.T) {
+func TestCustom_failureExits(t *testing.T) {
 	r, _ := customRunner(t, "make generate", "")
 	r.runShell = func(_, cmd string) error {
 		if cmd == "make generate" {
@@ -110,18 +107,8 @@ func TestCustom_failureRevertsAndExits(t *testing.T) {
 		}
 		return nil
 	}
-	var reverted bool
-	r.git = func(_ string, args ...string) (string, error) {
-		if len(args) > 0 && args[0] == "checkout" {
-			reverted = true
-		}
-		return "", nil
-	}
 
 	if code := r.run(context.Background()); code != 1 {
 		t.Fatalf("expected exit 1 on custom failure, got %d", code)
-	}
-	if !reverted {
-		t.Error("changes should be reverted when custom command fails")
 	}
 }

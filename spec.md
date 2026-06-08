@@ -1,6 +1,6 @@
 # Project Specification: gobump
 
-**Description:** A CLI tool to bump the Go `go` directive and vulnerable third-party dependencies using soak-time rules, run safety checks (including `govulncheck`), and optionally integrate with Git.
+**Description:** A CLI tool to bump the Go `go` directive and vulnerable third-party dependencies using soak-time rules and safety checks (including `govulncheck`). gobump is purely a Go toolchain automation tool; it does not interact with version control.
 
 ---
 
@@ -27,7 +27,7 @@ Govulncheck is invoked with `-json` so its output is parsed as structured JSON. 
 - If a **strictly newer** stable patch exists than the current `go` line, bump the `go` directive to it and run `go mod tidy`.
 - If no newer patch is available, this finding cannot be automatically resolved.
 
-Both categories are handled in a single pass. After any automated fix is applied, govulncheck is re-run to confirm clean. If **no fix was possible** (no newer Go patch, no library findings with a known fix version) or the **re-run still fails**, the run aborts, prints diagnostics, and reverts `go.mod` / `go.sum` for affected modules.
+Both categories are handled in a single pass. After any automated fix is applied, govulncheck is re-run to confirm clean. If **no fix was possible** or the **re-run still fails**, the run aborts and prints diagnostics. Modified files are left as-is; the caller is responsible for any rollback using their VCS.
 
 Govulncheck runs in two situations:
 - When the toolchain is **already at latest stable**: run `go mod tidy` and govulncheck (unless `-skip=govulncheck`).
@@ -49,23 +49,18 @@ gobump [path] [flags]
 
 | Flag         | Default                  | Description |
 |--------------|--------------------------|-------------|
-| `-push`      | `false`                  | If true, commits and pushes changes to `{current-remote}/{current-branch}`. |
-| `-pr`        | `""`                     | A shell command to run after pushing (e.g., `-pr="gh pr create --fill"`). |
 | `-test`      | `"go test ./..."`        | Command to run for validation. Must exit 0 to proceed. |
 | `-soak`      | `90d`                    | Duration to wait after a Go minor line's `x.y.0` tag before auto-bumping to that line's latest patch. |
-| `-protected` | `main,master,trunk`      | Comma-separated list of branches to never use without `-force`. |
-| `-force`     | `false`                  | Overrides branch protection and "dirty tree" checks. |
 | `-skip`      | `""`                     | Options: `all`, `major`, `govulncheck`, `custom`. |
 | `-dryrun`    | `false`                  | Print what would be done without writing files. |
 | `-custom`    | `""`                     | Extra shell command after all bumps (and per-module checks), **before** `-test`. |
 
 ---
 
-## 3. Execution Pipeline (The "Transaction")
+## 3. Execution Pipeline
 
-1. **Environment Check:** Ensure the Git tree is clean (unless `-force`). Check if current branch is in the protected list.
-2. **Discovery:** Find `go.mod` files under the path. Non-recursive by default; append `/...` for recursive walk (skips `vendor/`).
-3. **Update Phase (per module):**
+1. **Discovery:** Find `go.mod` files under the path. Non-recursive by default; append `/...` for recursive walk (skips `vendor/`).
+2. **Update Phase (per module):**
    - Fetch latest stable metadata.
    - If soak permits and the module is behind latest stable: set `go` to latest stable, then `go mod tidy`.
    - If the module **already** matches latest stable: `go mod tidy` only (no `go` line change).
@@ -73,13 +68,11 @@ gobump [path] [flags]
      - Library findings: `go get module@fixedVersion` per module + `go mod tidy`.
      - Stdlib findings: refetch releases; if a newer patch exists, bump `go` directive + `go mod tidy`.
    - If any fix was applied, re-run govulncheck to confirm clean.
-4. **Post-bump hook:** If `-custom` is set, run it once from the repository root **after** all modules are processed, **before** `-test`. On failure, revert `go.mod` / `go.sum` in bumped dirs (changes made only by `-custom` are **not** reverted).
-5. **Verification:** Run the `-test` command.
-6. **Finalization:**
-   - **On Failure:** Revert `go.mod` and `go.sum` to original state where applicable. Exit with error.
-   - **On Success:**
-     - If `-push`: `git add`, `git commit -m "chore: gobump updates"`, and `git push`.
-     - If `-pr`: Execute the provided shell string.
+   - On failure: exit non-zero. Modified files are left as-is for the caller to inspect and roll back via VCS.
+3. **Post-bump hook:** If `-custom` is set, run it once from the repository root **after** all modules are processed, **before** `-test`. On failure, exit non-zero.
+4. **Verification:** Run the `-test` command. On failure, exit non-zero.
+
+gobump does not commit, push, or create pull requests. Those steps are the caller's responsibility.
 
 ---
 
@@ -91,5 +84,4 @@ gobump [path] [flags]
 | Release / soak metadata | HTTP GET to go.dev JSON + GitHub commits API for `x.y.0` dates (no credentials in gobump). |
 | Vulnerability scanning | Shell out to `govulncheck -json ./...`; parse structured JSON output to partition stdlib vs library findings and apply targeted fixes. |
 | Library upgrades | `go get module@fixedVersion` per affected module, deduplicating by module at the highest required fixed version. |
-| Reversion logic | Use `git checkout -- go.mod go.sum` as the primary rollback mechanism. |
 | Version comparison | Custom comparison of `go` version tuples (`x.y.z`). |

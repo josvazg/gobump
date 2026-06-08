@@ -26,7 +26,6 @@ type runner struct {
 	path          string
 	skipSteps     map[string]bool
 	fetchReleases func(ctx context.Context) ([]Release, error)
-	git           func(dir string, args ...string) (string, error)
 	goCmd         func(dir string, args ...string) (string, error)
 	runShell      func(dir, cmd string) error
 	govulncheck   func(dir string) (VulnReport, error)
@@ -58,9 +57,8 @@ func newRunner(cfg Config, path string, env func(string) string) *runner {
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
 			return FetchReleases(ctx, nil, env("GOBUMP_DL_URL"), env("GOBUMP_COMMIT_URL"))
 		},
-		git:      defaultGit,
-		goCmd:    defaultGoCmd,
-		runShell: defaultRunShell,
+		goCmd:       defaultGoCmd,
+		runShell:    defaultRunShell,
 		govulncheck: defaultGovulncheck,
 	}
 }
@@ -85,11 +83,6 @@ func defaultRunShell(dir, command string) error {
 }
 
 func (r *runner) run(ctx context.Context) int {
-	if err := r.checkGitEnv(); err != nil {
-		fmt.Fprintf(os.Stderr, "gobump: %v\n", err)
-		return 1
-	}
-
 	modFiles, err := FindModFiles(r.path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: discovering modules: %v\n", err)
@@ -100,24 +93,16 @@ func (r *runner) run(ctx context.Context) int {
 		return 0
 	}
 
-	var bumpedDirs []string
+	var anyBumped bool
 	for _, modFile := range modFiles {
-		dir := filepath.Dir(modFile)
 		dirty, code := r.processModule(ctx, modFile)
 		if code != 0 {
-			rev := append([]string{}, bumpedDirs...)
-			if dirty {
-				rev = append(rev, dir)
-			}
-			r.revert(rev)
 			return code
 		}
-		if dirty {
-			bumpedDirs = append(bumpedDirs, dir)
-		}
+		anyBumped = anyBumped || dirty
 	}
 
-	if len(bumpedDirs) == 0 {
+	if !anyBumped {
 		return 0
 	}
 
@@ -125,7 +110,6 @@ func (r *runner) run(ctx context.Context) int {
 		fmt.Printf("running: %s\n", r.cfg.Custom)
 		if err := r.runShell(r.rootDir(), r.cfg.Custom); err != nil {
 			fmt.Fprintf(os.Stderr, "gobump: custom command failed: %v\n", err)
-			r.revert(bumpedDirs)
 			return 1
 		}
 	}
@@ -133,12 +117,10 @@ func (r *runner) run(ctx context.Context) int {
 	fmt.Printf("running: %s\n", r.cfg.TestCmd)
 	if err := r.runShell(r.rootDir(), r.cfg.TestCmd); err != nil {
 		fmt.Fprintf(os.Stderr, "gobump: tests failed: %v\n", err)
-		fmt.Fprintln(os.Stderr, "gobump: reverting changes")
-		r.revert(bumpedDirs)
 		return 1
 	}
 
-	return r.finalize(bumpedDirs)
+	return 0
 }
 
 func readModSumBytes(modDir string) (mod, sum []byte) {
@@ -225,8 +207,8 @@ func (r *runner) runGovulncheckGate(ctx context.Context, modFile, modDir string)
 	return nil
 }
 
-// processModule updates a single go.mod when appropriate. It returns (dirty, exitCode)
-// where dirty means go.mod or go.sum differs from the tree before this call.
+// processModule updates a single go.mod when appropriate. Returns (dirty, exitCode)
+// where dirty means go.mod or go.sum was modified relative to the start of this call.
 func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool, code int) {
 	modDir := filepath.Dir(modFile)
 	origMod, origSum := readModSumBytes(modDir)
@@ -286,13 +268,4 @@ func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool,
 		}
 	}
 	return dirtyNow(), 0
-}
-
-// revert restores go.mod and go.sum in each bumped directory via git checkout.
-func (r *runner) revert(dirs []string) {
-	for _, dir := range dirs {
-		if _, err := r.git(dir, "checkout", "--", "go.mod", "go.sum"); err != nil {
-			fmt.Fprintf(os.Stderr, "gobump: revert in %s: %v\n", dir, err)
-		}
-	}
 }

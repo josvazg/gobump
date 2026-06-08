@@ -21,7 +21,7 @@ func TestGovulncheck_retriesAfterNewerPatchFromRefetch(t *testing.T) {
 	var fetchCalls atomic.Int32
 	var vulnCalls atomic.Int32
 	r := &runner{
-		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true, TestCmd: "echo ok"},
+		cfg:  Config{Soak: 90 * 24 * time.Hour, TestCmd: "echo ok"},
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			n := fetchCalls.Add(1)
@@ -34,7 +34,6 @@ func TestGovulncheck_retriesAfterNewerPatchFromRefetch(t *testing.T) {
 		runShell: func(string, string) error {
 			return nil
 		},
-		git: func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) {
 			v := vulnCalls.Add(1)
 			if v == 1 {
@@ -74,14 +73,13 @@ func TestGovulncheck_runsWhenToolchainAlreadyLatest(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	var vulnCalls atomic.Int32
 	r := &runner{
-		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true, TestCmd: "echo ok"},
+		cfg:  Config{Soak: 90 * 24 * time.Hour, TestCmd: "echo ok"},
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
 		goCmd:    func(string, ...string) (string, error) { return "", nil },
 		runShell: func(string, string) error { return nil },
-		git:      func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) {
 			vulnCalls.Add(1)
 			return VulnReport{}, nil

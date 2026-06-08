@@ -18,7 +18,7 @@ func TestRunner_runsModTidyAfterBump(t *testing.T) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 
 	r := &runner{
-		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true},
+		cfg:  Config{Soak: 90 * 24 * time.Hour},
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
@@ -30,7 +30,6 @@ func TestRunner_runsModTidyAfterBump(t *testing.T) {
 			return "", nil
 		},
 		runShell:    func(string, string) error { return nil },
-		git:         func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 	}
 
@@ -53,7 +52,7 @@ func TestRunner_noTidyWhenSoaking(t *testing.T) {
 	fresh := time.Now().Add(-10 * 24 * time.Hour)
 
 	r := &runner{
-		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true},
+		cfg:  Config{Soak: 90 * 24 * time.Hour},
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: fresh, Stable: true}}, nil
@@ -65,7 +64,6 @@ func TestRunner_noTidyWhenSoaking(t *testing.T) {
 			return "", nil
 		},
 		runShell:    func(string, string) error { return nil },
-		git:         func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 	}
 

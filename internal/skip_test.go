@@ -16,7 +16,6 @@ func skipRunner(t *testing.T, goVersion, latestVersion string, cfg Config) (*run
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-100 * 24 * time.Hour)
-	cfg.Force = true
 	if cfg.TestCmd == "" {
 		cfg.TestCmd = "echo ok"
 	}
@@ -31,7 +30,6 @@ func skipRunner(t *testing.T, goVersion, latestVersion string, cfg Config) (*run
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		runShell:    func(string, string) error { return nil },
-		git:         func(string, ...string) (string, error) { return "", nil },
 	}
 	return r, filepath.Join(dir, "go.mod")
 }

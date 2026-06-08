@@ -18,7 +18,7 @@ func vulnRunner(t *testing.T, vulnErr error, skip string) (*runner, *bool) {
 	old := time.Now().Add(-100 * 24 * time.Hour)
 	called := false
 	r := &runner{
-		cfg:       Config{Soak: 90 * 24 * time.Hour, Force: true, TestCmd: "echo ok", Skip: skip},
+		cfg:       Config{Soak: 90 * 24 * time.Hour, TestCmd: "echo ok", Skip: skip},
 		skipSteps: parseSkip(skip),
 		path:      dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
@@ -26,7 +26,6 @@ func vulnRunner(t *testing.T, vulnErr error, skip string) (*runner, *bool) {
 		},
 		goCmd:    func(string, ...string) (string, error) { return "", nil },
 		runShell: func(string, string) error { return nil },
-		git:      func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) {
 			called = true
 			return VulnReport{}, vulnErr
@@ -45,21 +44,16 @@ func TestGovulncheck_runsAfterBump(t *testing.T) {
 	}
 }
 
-func TestGovulncheck_failsAndRevertsOnVulns(t *testing.T) {
+func TestGovulncheck_failsAndExitsOnVulns(t *testing.T) {
 	r, _ := vulnRunner(t, errors.New("vulnerabilities found"), "")
-	var reverted bool
-	r.git = func(_ string, args ...string) (string, error) {
-		if len(args) > 0 && args[0] == "checkout" {
-			reverted = true
-		}
-		return "", nil
-	}
 
 	if code := r.run(context.Background()); code != 1 {
 		t.Fatalf("expected exit 1 when govulncheck finds vulns, got %d", code)
 	}
-	if !reverted {
-		t.Error("changes should be reverted when govulncheck fails")
+	// Files are left modified; the caller's VCS handles any rollback.
+	got, _ := ReadGoVersion(filepath.Join(r.path, "go.mod"))
+	if got != "1.22.3" {
+		t.Errorf("go.mod should reflect the bumped version after failure, got %q", got)
 	}
 }
 
@@ -71,14 +65,13 @@ func TestGovulncheck_skippedWhenSoakingNotAtLatest(t *testing.T) {
 	fresh := time.Now().Add(-10 * 24 * time.Hour)
 	called := false
 	r := &runner{
-		cfg:  Config{Soak: 90 * 24 * time.Hour, Force: true},
+		cfg:  Config{Soak: 90 * 24 * time.Hour},
 		path: dir,
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: fresh, Stable: true}}, nil
 		},
 		goCmd:       func(string, ...string) (string, error) { return "", nil },
 		runShell:    func(string, string) error { return nil },
-		git:         func(string, ...string) (string, error) { return "", nil },
 		govulncheck: func(string) (VulnReport, error) { called = true; return VulnReport{}, nil },
 	}
 	r.run(context.Background())

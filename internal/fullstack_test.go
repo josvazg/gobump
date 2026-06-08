@@ -26,37 +26,35 @@ func TestFullStack(t *testing.T) {
 		vulnFail   bool
 		wantFail   bool
 		wantVer    string
-		wantCommit bool
 	}{
 		{
-			name:       "bump and push",
+			name:       "bump",
 			startVer:   "1.21.0",
 			commitDate: old,
-			args:       []string{"-force", "-push", "-soak=1d", "-test=echo ok"},
+			args:       []string{"-soak=1d", "-test=echo ok"},
 			wantVer:    latestVer,
-			wantCommit: true,
 		},
 		{
 			name:       "soak not elapsed",
 			startVer:   "1.21.0",
 			commitDate: fresh,
-			args:       []string{"-force", "-soak=90d", "-test=echo ok"},
+			args:       []string{"-soak=90d", "-test=echo ok"},
 			wantVer:    "1.21.0",
 		},
 		{
 			name:       "govulncheck fails",
 			startVer:   "1.21.0",
 			commitDate: old,
-			args:       []string{"-force", "-soak=1d", "-test=echo ok"},
+			args:       []string{"-soak=1d", "-test=echo ok"},
 			vulnFail:   true,
 			wantFail:   true,
-			wantVer:    "1.21.0",
+			wantVer:    latestVer, // bumped before govulncheck ran; no revert, VCS handles it
 		},
 		{
 			name:       "already at latest",
 			startVer:   latestVer,
 			commitDate: old,
-			args:       []string{"-force", "-soak=1d", "-test=echo ok"},
+			args:       []string{"-soak=1d", "-test=echo ok"},
 			wantVer:    latestVer,
 		},
 	}
@@ -80,11 +78,6 @@ func TestFullStack(t *testing.T) {
 			if got := fw.goVer(t); got != tc.wantVer {
 				t.Errorf("go version = %q, want %q", got, tc.wantVer)
 			}
-			if tc.wantCommit {
-				if log := fw.gitLog(t); !strings.Contains(log, "gobump updates") {
-					t.Errorf("expected gobump commit in git log:\n%s", log)
-				}
-			}
 		})
 	}
 }
@@ -92,7 +85,6 @@ func TestFullStack(t *testing.T) {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 // fakeWorld is a fully simulated e2e environment:
-//   - a real git repository with a bare remote as origin
 //   - a fake HTTP server standing in for go.dev/dl and the GitHub commits API
 //   - a fake govulncheck binary whose exit code is controlled by the
 //     FAKE_VULN_EXIT_CODE environment variable (default: 0 = clean)
@@ -123,21 +115,9 @@ func (fw *fakeWorld) goVer(t *testing.T) string {
 	return v
 }
 
-// gitLog returns the one-line git log of fw.dir.
-func (fw *fakeWorld) gitLog(t *testing.T) string {
-	t.Helper()
-	out, err := exec.Command("git", "-C", fw.dir, "log", "--oneline").Output()
-	if err != nil {
-		t.Fatalf("git log: %v", err)
-	}
-	return string(out)
-}
-
 // newFakeWorld builds the complete simulated environment:
 //
 //   - writes modContent to go.mod (plus an empty go.sum)
-//   - creates a real git repo, makes an initial commit, and adds a bare remote
-//     so git push works without touching a real server
 //   - installs a fake govulncheck script at the front of PATH
 //   - starts a fake HTTP release server (reuses fakeDLServer from gorelease_test.go)
 //
@@ -146,7 +126,6 @@ func newFakeWorld(t *testing.T, modContent string, versions []map[string]any, co
 	t.Helper()
 
 	dir := t.TempDir()
-	bare := t.TempDir()
 	binDir := t.TempDir()
 
 	// Module files.
@@ -162,20 +141,6 @@ func newFakeWorld(t *testing.T, modContent string, versions []map[string]any, co
 	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
 	// Prevent go mod tidy from downloading a different toolchain.
 	t.Setenv("GOTOOLCHAIN", "local")
-
-	// Real git repo with a clean initial commit.
-	gitRun(t, dir, "init")
-	gitRun(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
-	gitRun(t, dir, "config", "user.email", "test@example.com")
-	gitRun(t, dir, "config", "user.name", "Test User")
-	gitRun(t, dir, "add", ".")
-	gitRun(t, dir, "commit", "-m", "init: add go.mod")
-
-	// Bare remote so git push has somewhere to go.
-	gitRun(t, bare, "init", "--bare")
-	gitRun(t, bare, "symbolic-ref", "HEAD", "refs/heads/main")
-	gitRun(t, dir, "remote", "add", "origin", bare)
-	gitRun(t, dir, "push", "-u", "origin", "HEAD:main")
 
 	// Fake HTTP release server.
 	srv, _ := fakeDLServer(t, versions, commitDate)
@@ -198,14 +163,4 @@ func installedGoVersion(t *testing.T) string {
 		t.Fatalf("unexpected go version output: %q", out)
 	}
 	return f[2] // e.g. "go1.26.3"
-}
-
-// gitRun executes a git sub-command inside dir, fataling on error.
-func gitRun(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v in %q: %v\n%s", args, dir, err, out)
-	}
 }

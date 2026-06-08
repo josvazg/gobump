@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Automates Go toolchain and dependency bumps with soak-time rules, vulnerability checks, and optional VCS integration.
+Automates Go toolchain and dependency bumps with soak-time rules and vulnerability checks.
 
 ## What it does
 
@@ -12,11 +12,11 @@ Automates Go toolchain and dependency bumps with soak-time rules, vulnerability 
 - **Vulnerability gate:** runs `go mod tidy` and `govulncheck ./...` when the `go` line already matches latest stable **or** after a soak-driven bump (unless `-skip=govulncheck`). Govulncheck output is parsed as structured JSON to distinguish finding types:
   - **Library findings** (third-party modules): gobump runs `go get module@fixedVersion` for each affected dependency and then `go mod tidy`.
   - **Stdlib / toolchain findings:** gobump refetches release metadata; if a strictly newer stable patch exists, it bumps the `go` directive, tidies, and re-runs govulncheck.
-  - After any automated fix, govulncheck is re-run to confirm clean. If no fix is possible (no newer Go patch, no library fix version) or the re-run still fails, the run **fails** and `go.mod` / `go.sum` are reverted.
-- **Validates** with your `-test` command (default `go test ./...`) before any `-push`.
-- **Optionally** commits, pushes, and runs a `-pr` shell command—or rolls back `go.mod` / `go.sum` on failure.
+  - After any automated fix, govulncheck is re-run to confirm clean. If no fix is possible or the re-run still fails, gobump exits non-zero. Any modified files are left as-is; use your VCS to roll back if needed.
+- **Validates** with your `-test` command (default `go test ./...`).
+- **Optionally** runs a `-custom` shell command after all modules are bumped, before `-test`.
 
-`gobump` does not handle credentials; `git` / `gh` / the network behavior of `go` tools use your existing environment.
+gobump does not touch version control. Commit, push, and PR creation are left to the caller.
 
 ## Install
 
@@ -30,18 +30,21 @@ go install github.com/josvazg/gobump@latest
 gobump [path] [flags]
 
 Flags:
-  -push        commit and push changes to current remote/branch
-  -pr string   shell command to run after push (e.g. "gh pr create --fill")
-  -test string test command (default "go test ./...")
-  -soak dur    soak duration before bumping go toolchain (default 90d)
-  -protected   comma-separated branches to protect (default "main,master,trunk")
-  -force       override branch protection and dirty-tree checks
-  -dryrun      print bump decisions without writing files
-  -skip        skip steps: all | major | govulncheck | custom
-  -custom      extra shell command to run after all bumps, before -test
+  -test string  test command (default "go test ./...")
+  -soak dur     soak duration before bumping go toolchain (default 90d)
+  -dryrun       print bump decisions without writing files
+  -skip         skip steps: all | major | govulncheck | custom
+  -custom       extra shell command to run after all bumps, before -test
 ```
 
-`-custom` runs **after** every module has been bumped and tidied (and after per-module `govulncheck`), but **before** the suite in `-test`, so generators cannot reach `-push` without passing the same gate as a normal change.
+`-custom` runs **after** every module has been bumped and tidied (and after per-module `govulncheck`), but **before** the suite in `-test`, so generators cannot reach the test gate without passing the same validation as a normal change.
+
+## CI integration example
+
+```sh
+gobump ./... -soak=30d -test="make test" && \
+  git add -u && git commit -m "chore: gobump updates" && git push
+```
 
 ## Development
 

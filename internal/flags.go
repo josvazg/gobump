@@ -10,15 +10,11 @@ import (
 
 // Config holds the resolved CLI configuration.
 type Config struct {
-	Push      bool
-	PR        string
-	TestCmd   string
-	Soak      time.Duration
-	Protected string
-	Force     bool
-	Skip      string
-	Custom    string
-	DryRun    bool
+	TestCmd string
+	Soak    time.Duration
+	Skip    string
+	Custom  string
+	DryRun  bool
 }
 
 // ParseFlags parses CLI args into a Config and an optional target path.
@@ -29,12 +25,8 @@ func ParseFlags(args []string) (Config, string, error) {
 	var cfg Config
 	var soak dayDuration
 
-	fs.BoolVar(&cfg.Push, "push", false, "commit and push changes")
-	fs.StringVar(&cfg.PR, "pr", "", "shell command to run after push")
 	fs.StringVar(&cfg.TestCmd, "test", "go test ./...", "validation command")
 	fs.Var(&soak, "soak", "soak duration before bumping (e.g. 90d)")
-	fs.StringVar(&cfg.Protected, "protected", "main,master,trunk", "protected branches")
-	fs.BoolVar(&cfg.Force, "force", false, "override branch protection and dirty-tree checks")
 	fs.BoolVar(&cfg.DryRun, "dryrun", false, "print what would be done without making changes")
 	fs.StringVar(&cfg.Skip, "skip", "", "skip steps: all|major|govulncheck|custom")
 	fs.StringVar(&cfg.Custom, "custom", "", "extra command to run after bumping, before testing")
