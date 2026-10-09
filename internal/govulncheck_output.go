@@ -85,9 +85,9 @@ func parseVulnReport(r io.Reader) (VulnReport, error) {
 	return report, nil
 }
 
-// defaultGovulncheck runs govulncheck -json ./... in dir.
+// defaultCheckVulns runs govulncheck -json ./... in dir.
 // It captures stdout for parsing even when the command exits non-zero.
-func defaultGovulncheck(dir string) (VulnReport, error) {
+func defaultCheckVulns(dir string) (VulnReport, error) {
 	cmd := exec.Command("govulncheck", "-json", "./...")
 	cmd.Dir = dir
 	var stdout bytes.Buffer

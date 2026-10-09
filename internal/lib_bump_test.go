@@ -21,7 +21,7 @@ func TestLibBump(t *testing.T) {
 		startVer      string
 		latestVer     string
 		firstFindings []Finding
-		vulnPersists  bool   // govulncheck always returns error (re-run also fails)
+		vulnPersists  bool // govulncheck always returns error (re-run also fails)
 		wantCode      int
 		wantGetArgs   []string // expected "module@version" args to go get; nil = skip check
 		wantMinCalls  int32    // minimum govulncheck invocation count
@@ -51,20 +51,20 @@ func TestLibBump(t *testing.T) {
 		},
 		{
 			name:          "re-run still fails — exits 1",
-			startVer:      "1.21.0",
+			startVer:      "1.22.3",
 			latestVer:     "go1.22.3",
 			firstFindings: []Finding{net},
 			vulnPersists:  true,
 			wantCode:      1,
-			wantGoVer:     "1.22.3", // bumped; VCS handles any rollback
+			wantGoVer:     "1.22.3", // already at latest; gate still runs and fails
 		},
 		{
-			// processModule bumps go directive (needsPatch); runGovulncheckGate
-			// then handles both lib go get and stdlib detection (already at latest,
-			// so no extra bump needed).
-			name:          "mixed stdlib and library — library go get applied",
-			startVer:      "1.21.0",
-			latestVer:     "go1.22.3",
+			// Already at latest: processModule skips the bump; fixVulns
+			// still runs and handles both lib go get and stdlib detection (stdlib
+			// finding is already fixed at latest, so no extra bump needed).
+			name:      "mixed stdlib and library — library go get applied",
+			startVer:  "1.22.3",
+			latestVer: "go1.22.3",
 			firstFindings: []Finding{
 				{OSV: "GO-STDLIB", Module: "stdlib", FixedVersion: "go1.22.3", Package: "net/http"},
 				net,
@@ -98,7 +98,7 @@ func TestLibBump(t *testing.T) {
 					return "", nil
 				},
 				runShell: func(string, string) error { return nil },
-				govulncheck: func(string) (VulnReport, error) {
+				checkVulns: func(string) (VulnReport, error) {
 					n := calls.Add(1)
 					if n == 1 || tc.vulnPersists {
 						return VulnReport{Findings: tc.firstFindings}, errors.New("vulnerable")

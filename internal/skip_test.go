@@ -27,9 +27,9 @@ func skipRunner(t *testing.T, goVersion, latestVersion string, cfg Config) (*run
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: latestVersion, Date: old, Stable: true}}, nil
 		},
-		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
-		runShell:    func(string, string) error { return nil },
+		goCmd:      func(string, ...string) (string, error) { return "", nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		runShell:   func(string, string) error { return nil },
 	}
 	return r, filepath.Join(dir, "go.mod")
 }
