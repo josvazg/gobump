@@ -28,7 +28,7 @@ type runner struct {
 	fetchReleases func(ctx context.Context) ([]Release, error)
 	goCmd         func(dir string, args ...string) (string, error)
 	runShell      func(dir, cmd string) error
-	govulncheck   func(dir string) (VulnReport, error)
+	checkVulns    func(dir string) (VulnReport, error)
 }
 
 func parseSkip(s string) map[string]bool {
@@ -57,9 +57,9 @@ func newRunner(cfg Config, path string, env func(string) string) *runner {
 		fetchReleases: func(ctx context.Context) ([]Release, error) {
 			return FetchReleases(ctx, nil, env("GOBUMP_DL_URL"), env("GOBUMP_COMMIT_URL"))
 		},
-		goCmd:       defaultGoCmd,
-		runShell:    defaultRunShell,
-		govulncheck: defaultGovulncheck,
+		goCmd:      defaultGoCmd,
+		runShell:   defaultRunShell,
+		checkVulns: defaultCheckVulns,
 	}
 }
 
@@ -95,7 +95,7 @@ func (r *runner) run(ctx context.Context) int {
 
 	var anyBumped bool
 	for _, modFile := range modFiles {
-		dirty, code := r.processModule(ctx, modFile)
+		dirty, code := r.bumpModule(ctx, modFile)
 		if code != 0 {
 			return code
 		}
@@ -138,18 +138,24 @@ func modSnapChanged(modDir string, origMod, origSum []byte) bool {
 	return !bytes.Equal(m, origMod) || !bytes.Equal(s, origSum)
 }
 
-// runGovulncheckGate runs govulncheck and attempts automated fixes:
+// fixVulns runs govulncheck and attempts automated fixes:
 //   - library findings: go get module@fixedVersion + go mod tidy
 //   - stdlib findings: bump go directive to latest patch + go mod tidy
 //
 // If any fix was applied, govulncheck is re-run to confirm clean.
-func (r *runner) runGovulncheckGate(ctx context.Context, modFile, modDir string) error {
+func (r *runner) fixVulns(ctx context.Context, modFile, modDir string) error {
 	if r.shouldSkip("govulncheck") {
 		return nil
 	}
-	report, firstErr := r.govulncheck(modDir)
-	if firstErr == nil {
+	report, firstErr := r.checkVulns(modDir)
+	fmt.Fprintf(os.Stderr, "gobump: govulncheck findings: %d (%s)\n", len(report.Findings), modDir)
+	// A nil error only means the subprocess exited zero; findings in the
+	// JSON report still mean the gate failed and remediation must run.
+	if firstErr == nil && len(report.Findings) == 0 {
 		return nil
+	}
+	if firstErr == nil {
+		firstErr = fmt.Errorf("govulncheck reported %d finding(s)", len(report.Findings))
 	}
 	fmt.Fprintf(os.Stderr, "gobump: vulnerabilities found in %s: %v\n", modDir, firstErr)
 
@@ -200,16 +206,21 @@ func (r *runner) runGovulncheckGate(ctx context.Context, modFile, modDir string)
 		return fmt.Errorf("govulncheck")
 	}
 
-	if _, err := r.govulncheck(modDir); err != nil {
+	report, err := r.checkVulns(modDir)
+	fmt.Fprintf(os.Stderr, "gobump: govulncheck findings: %d (%s)\n", len(report.Findings), modDir)
+	if err != nil || len(report.Findings) > 0 {
 		fmt.Fprintln(os.Stderr, "gobump: govulncheck failed after automated fix (fix manually)")
+		if err == nil {
+			err = fmt.Errorf("govulncheck: %d finding(s) remain", len(report.Findings))
+		}
 		return err
 	}
 	return nil
 }
 
-// processModule updates a single go.mod when appropriate. Returns (dirty, exitCode)
+// bumpModule updates a single go.mod when appropriate. Returns (dirty, exitCode)
 // where dirty means go.mod or go.sum was modified relative to the start of this call.
-func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool, code int) {
+func (r *runner) bumpModule(ctx context.Context, modFile string) (dirty bool, code int) {
 	modDir := filepath.Dir(modFile)
 	origMod, origSum := readModSumBytes(modDir)
 	dirtyNow := func() bool { return modSnapChanged(modDir, origMod, origSum) }
@@ -238,12 +249,18 @@ func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool,
 	atLatest := latest != nil && compareGoVersions("go"+current, latest.Version) >= 0
 	soaking := !needsPatch && !atLatest
 
-	if soaking || r.cfg.DryRun {
+	if r.cfg.DryRun {
 		return false, 0
 	}
 
-	switch {
-	case needsPatch:
+	if soaking {
+		if err := r.fixVulns(ctx, modFile, modDir); err != nil {
+			return dirtyNow(), 1
+		}
+		return false, 0
+	}
+
+	if needsPatch {
 		if err := WriteGoVersion(modFile, latest.Version); err != nil {
 			fmt.Fprintf(os.Stderr, "gobump: updating %s: %v\n", modFile, err)
 			return dirtyNow(), 1
@@ -252,10 +269,7 @@ func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool,
 			fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
 			return dirtyNow(), 1
 		}
-		if err := r.runGovulncheckGate(ctx, modFile, modDir); err != nil {
-			return dirtyNow(), 1
-		}
-	default: // atLatest: health-check tidy + govulncheck without a version change
+	} else {
 		if r.shouldSkip("govulncheck") {
 			return dirtyNow(), 0
 		}
@@ -263,7 +277,7 @@ func (r *runner) processModule(ctx context.Context, modFile string) (dirty bool,
 			fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
 			return dirtyNow(), 1
 		}
-		if err := r.runGovulncheckGate(ctx, modFile, modDir); err != nil {
+		if err := r.fixVulns(ctx, modFile, modDir); err != nil {
 			return dirtyNow(), 1
 		}
 	}

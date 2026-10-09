@@ -29,8 +29,8 @@ func TestRunner_runsModTidyAfterBump(t *testing.T) {
 			}
 			return "", nil
 		},
-		runShell:    func(string, string) error { return nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		runShell:   func(string, string) error { return nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
 	}
 
 	if code := r.run(context.Background()); code != 0 {
@@ -63,8 +63,8 @@ func TestRunner_noTidyWhenSoaking(t *testing.T) {
 			}
 			return "", nil
 		},
-		runShell:    func(string, string) error { return nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		runShell:   func(string, string) error { return nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
 	}
 
 	r.run(context.Background())

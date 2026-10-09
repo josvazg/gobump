@@ -43,12 +43,12 @@ func TestFullStack(t *testing.T) {
 		},
 		{
 			name:       "govulncheck fails",
-			startVer:   "1.21.0",
+			startVer:   latestVer, // already at latest; gate still runs e2e and fails
 			commitDate: old,
 			args:       []string{"-soak=1d", "-test=echo ok"},
 			vulnFail:   true,
 			wantFail:   true,
-			wantVer:    latestVer, // bumped before govulncheck ran; no revert, VCS handles it
+			wantVer:    latestVer,
 		},
 		{
 			name:       "already at latest",

@@ -24,9 +24,9 @@ func TestTestGate_runsAfterBump(t *testing.T) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
-		runShell:    func(string, string) error { testRan = true; return nil },
+		goCmd:      func(string, ...string) (string, error) { return "", nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		runShell:   func(string, string) error { testRan = true; return nil },
 	}
 
 	if code := r.run(context.Background()); code != 0 {
@@ -51,9 +51,9 @@ func TestTestGate_failsWithDirtyFiles(t *testing.T) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
-		runShell:    func(string, string) error { return errors.New("tests failed") },
+		goCmd:      func(string, ...string) (string, error) { return "", nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		runShell:   func(string, string) error { return errors.New("tests failed") },
 	}
 
 	if code := r.run(context.Background()); code != 1 {
@@ -81,9 +81,9 @@ func TestTestGate_skippedWhenNothingBumped(t *testing.T) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
-		runShell:    func(string, string) error { testRan = true; return nil },
+		goCmd:      func(string, ...string) (string, error) { return "", nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		runShell:   func(string, string) error { testRan = true; return nil },
 	}
 
 	r.run(context.Background())

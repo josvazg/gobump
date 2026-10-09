@@ -29,8 +29,8 @@ func customRunner(t *testing.T, custom, skip string) (*runner, *[]string) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		goCmd:      func(string, ...string) (string, error) { return "", nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
 		runShell: func(_, cmd string) error {
 			shellCmds = append(shellCmds, cmd)
 			return nil
@@ -79,9 +79,9 @@ func TestCustom_skippedWhenNothingBumped(t *testing.T) {
 		fetchReleases: func(_ context.Context) ([]Release, error) {
 			return []Release{{Version: "go1.22.3", Date: old, Stable: true}}, nil
 		},
-		goCmd:       func(string, ...string) (string, error) { return "", nil },
-		govulncheck: func(string) (VulnReport, error) { return VulnReport{}, nil },
-		runShell:    func(_, cmd string) error { customRan = customRan || cmd == "make generate"; return nil },
+		goCmd:      func(string, ...string) (string, error) { return "", nil },
+		checkVulns: func(string) (VulnReport, error) { return VulnReport{}, nil },
+		runShell:   func(_, cmd string) error { customRan = customRan || cmd == "make generate"; return nil },
 	}
 	r.run(context.Background())
 	if customRan {
