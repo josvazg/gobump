@@ -138,6 +138,16 @@ func modSnapChanged(modDir string, origMod, origSum []byte) bool {
 	return !bytes.Equal(m, origMod) || !bytes.Equal(s, origSum)
 }
 
+// skipVulns reports that govulncheck was not run for a module and why.
+// An explicit -skip=govulncheck always takes precedence over any contextual
+// reason. Skipped scans report no findings count.
+func (r *runner) skipVulns(reason string) {
+	if r.shouldSkip("govulncheck") {
+		reason = "-skip=govulncheck"
+	}
+	fmt.Fprintf(os.Stderr, "gobump: govulncheck skipped (%s)\n", reason)
+}
+
 // fixVulns runs govulncheck and attempts automated fixes:
 //   - library findings: go get module@fixedVersion + go mod tidy
 //   - stdlib findings: bump go directive to latest patch + go mod tidy
@@ -145,10 +155,11 @@ func modSnapChanged(modDir string, origMod, origSum []byte) bool {
 // If any fix was applied, govulncheck is re-run to confirm clean.
 func (r *runner) fixVulns(ctx context.Context, modFile, modDir string) error {
 	if r.shouldSkip("govulncheck") {
+		r.skipVulns("-skip=govulncheck")
 		return nil
 	}
 	report, firstErr := r.checkVulns(modDir)
-	fmt.Fprintf(os.Stderr, "gobump: govulncheck findings: %d (%s)\n", len(report.Findings), modDir)
+	fmt.Fprintf(os.Stderr, "gobump: govulncheck findings: %d (%s)\n", len(report.Findings), modFile)
 	// A nil error only means the subprocess exited zero; findings in the
 	// JSON report still mean the gate failed and remediation must run.
 	if firstErr == nil && len(report.Findings) == 0 {
@@ -207,7 +218,7 @@ func (r *runner) fixVulns(ctx context.Context, modFile, modDir string) error {
 	}
 
 	report, err := r.checkVulns(modDir)
-	fmt.Fprintf(os.Stderr, "gobump: govulncheck findings: %d (%s)\n", len(report.Findings), modDir)
+	fmt.Fprintf(os.Stderr, "gobump: govulncheck findings: %d (%s)\n", len(report.Findings), modFile)
 	if err != nil || len(report.Findings) > 0 {
 		fmt.Fprintln(os.Stderr, "gobump: govulncheck failed after automated fix (fix manually)")
 		if err == nil {
@@ -242,6 +253,7 @@ func (r *runner) bumpModule(ctx context.Context, modFile string) (dirty bool, co
 	if needsPatch && latest != nil && r.shouldSkip("major") && isMajorBump(current, latest.Version) {
 		fmt.Printf("%s: skipping cross-minor bump %s → %s (-skip=major)\n",
 			modFile, current, strings.TrimPrefix(latest.Version, "go"))
+		r.skipVulns("major bump suppressed by -skip=major")
 		return false, 0
 	}
 	fmt.Printf("%s: %s\n", modFile, reason)
@@ -250,6 +262,7 @@ func (r *runner) bumpModule(ctx context.Context, modFile string) (dirty bool, co
 	soaking := !needsPatch && !atLatest
 
 	if r.cfg.DryRun {
+		r.skipVulns("dry run")
 		return false, 0
 	}
 
@@ -269,17 +282,22 @@ func (r *runner) bumpModule(ctx context.Context, modFile string) (dirty bool, co
 			fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
 			return dirtyNow(), 1
 		}
-	} else {
-		if r.shouldSkip("govulncheck") {
-			return dirtyNow(), 0
-		}
-		if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
-			fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
-			return dirtyNow(), 1
-		}
-		if err := r.fixVulns(ctx, modFile, modDir); err != nil {
-			return dirtyNow(), 1
-		}
+		// The bump just moved the go directive to the latest release, so a
+		// scan against the previous (vulnerable) module graph is pointless.
+		r.skipVulns("Go version just updated to latest")
+		return dirtyNow(), 0
+	}
+
+	if r.shouldSkip("govulncheck") {
+		r.skipVulns("-skip=govulncheck")
+		return dirtyNow(), 0
+	}
+	if _, err := r.goCmd(modDir, "mod", "tidy"); err != nil {
+		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
+		return dirtyNow(), 1
+	}
+	if err := r.fixVulns(ctx, modFile, modDir); err != nil {
+		return dirtyNow(), 1
 	}
 	return dirtyNow(), 0
 }

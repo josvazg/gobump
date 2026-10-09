@@ -3,9 +3,11 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // VulnReport holds findings from a govulncheck -json run.
@@ -85,10 +87,37 @@ func parseVulnReport(r io.Reader) (VulnReport, error) {
 	return report, nil
 }
 
+// govulncheckCommand resolves the govulncheck executable for dir. It first
+// tries `go tool -n govulncheck` with cmd.Dir set to dir, so source and dev
+// runs use the go.mod tool directive. If Go tool resolution fails, it falls
+// back to exec.LookPath so an installed gobump can use a PATH-installed
+// govulncheck when the target module lacks the tool directive.
+func govulncheckCommand(dir string) (string, error) {
+	cmd := exec.Command("go", "tool", "-n", "govulncheck")
+	cmd.Dir = dir
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = nil
+	if err := cmd.Run(); err == nil {
+		if path := strings.TrimSpace(stdout.String()); path != "" {
+			return path, nil
+		}
+	}
+	path, err := exec.LookPath("govulncheck")
+	if err != nil {
+		return "", fmt.Errorf("govulncheck not found: neither `go tool govulncheck` resolved in %s nor on PATH: %w", dir, err)
+	}
+	return path, nil
+}
+
 // defaultCheckVulns runs govulncheck -json ./... in dir.
 // It captures stdout for parsing even when the command exits non-zero.
 func defaultCheckVulns(dir string) (VulnReport, error) {
-	cmd := exec.Command("govulncheck", "-json", "./...")
+	bin, err := govulncheckCommand(dir)
+	if err != nil {
+		return VulnReport{}, err
+	}
+	cmd := exec.Command(bin, "-json", "./...")
 	cmd.Dir = dir
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout

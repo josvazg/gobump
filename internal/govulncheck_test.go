@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,11 +42,17 @@ func vulnRunner(t *testing.T, vulnErr error, skip string) (*runner, *bool) {
 
 func TestGovulncheck_notCalledAfterBumpToLatest(t *testing.T) {
 	r, called := vulnRunner(t, nil, "")
+	restore := captureStderr(t)
 	if code := r.run(context.Background()); code != 0 {
 		t.Fatalf("run returned %d", code)
 	}
+	out := restore()
 	if *called {
 		t.Error("govulncheck should not run after a successful bump to latest")
+	}
+	if !strings.Contains(out, "govulncheck skipped (Go version just updated to latest)") {
+		t.Errorf("stderr %q does not explain govulncheck skip %q",
+			out, "govulncheck skipped (Go version just updated to latest)")
 	}
 }
 
@@ -222,21 +229,28 @@ func TestGovulncheck_reportsFindingCountsForEachScan(t *testing.T) {
 	}
 
 	out := restore()
-	if !strings.Contains(out, "govulncheck findings: 1") {
-		t.Errorf("stderr %q does not contain one-finding count for initial scan %q", out, "govulncheck findings: 1")
+	modFile := filepath.Join(dir, "go.mod")
+	if !strings.Contains(out, fmt.Sprintf("govulncheck findings: 1 (%s)", modFile)) {
+		t.Errorf("stderr %q does not contain one-finding count with go.mod path %q", out, "govulncheck findings: 1 ("+modFile+")")
 	}
-	if !strings.Contains(out, "govulncheck findings: 0") {
-		t.Errorf("stderr %q does not contain zero count for clean recheck %q", out, "govulncheck findings: 0")
+	if !strings.Contains(out, fmt.Sprintf("govulncheck findings: 0 (%s)", modFile)) {
+		t.Errorf("stderr %q does not contain zero count with go.mod path for clean recheck %q", out, "govulncheck findings: 0 ("+modFile+")")
 	}
 }
 
 func TestGovulncheck_skippedByFlag(t *testing.T) {
 	r, called := vulnRunner(t, errors.New("would fail"), "govulncheck")
+	restore := captureStderr(t)
 	if code := r.run(context.Background()); code != 0 {
 		t.Fatalf("run returned %d; -skip=govulncheck should suppress it", code)
 	}
+	out := restore()
 	if *called {
 		t.Error("govulncheck should not run when skipped")
+	}
+	if !strings.Contains(out, "govulncheck skipped (-skip=govulncheck)") {
+		t.Errorf("stderr %q does not explain govulncheck skip %q",
+			out, "govulncheck skipped (-skip=govulncheck)")
 	}
 }
 

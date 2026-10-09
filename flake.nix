@@ -12,8 +12,6 @@
         default = pkgs.mkShell {
           packages = [
             pkgs.go
-            pkgs.govulncheck
-            pkgs.golangci-lint
             pkgs.mage
             pkgs.git
           ];
