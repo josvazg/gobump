@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -188,5 +190,36 @@ func TestFinding_IsStdlib(t *testing.T) {
 		if got := f.IsStdlib(); got != tc.want {
 			t.Errorf("Finding{Module:%q}.IsStdlib() = %v, want %v", tc.module, got, tc.want)
 		}
+	}
+}
+
+func TestGovulncheckCommand_ResolvesModuleTool(t *testing.T) {
+	// The test cwd is internal/, so the repository module root is "..".
+	got, err := govulncheckCommand("..")
+	if err != nil {
+		t.Fatalf("govulncheckCommand: %v", err)
+	}
+	if filepath.Base(got) != "govulncheck" {
+		t.Errorf("basename = %q, want %q (full path %q)", filepath.Base(got), "govulncheck", got)
+	}
+}
+
+func TestGovulncheckCommand_FallsBackToPath(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "govulncheck")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", dir)
+
+	// A temp dir has no go.mod tool declaration, so the helper must fall back
+	// to the test PATH and find the fake executable.
+	got, err := govulncheckCommand(dir)
+	if err != nil {
+		t.Fatalf("govulncheckCommand: %v", err)
+	}
+	if filepath.Base(got) != "govulncheck" {
+		t.Errorf("basename = %q, want %q (full path %q)", filepath.Base(got), "govulncheck", got)
 	}
 }

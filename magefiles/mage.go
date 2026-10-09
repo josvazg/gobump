@@ -19,7 +19,7 @@ func Test() error {
 
 // Lint runs golangci-lint.
 func Lint() error {
-	return sh.Run("golangci-lint", "run", "./...")
+	return sh.Run("go", "tool", "golangci-lint", "run", "./...")
 }
 
 // Install installs gobump to GOPATH/bin.

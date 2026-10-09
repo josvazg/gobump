@@ -24,6 +24,12 @@ gobump does not touch version control. Commit, push, and PR creation are left to
 go install github.com/josvazg/gobump@latest
 ```
 
+> **Note:** gobump uses `govulncheck` from the target module's `tool` directive when available; otherwise it requires `govulncheck` on PATH. To install it as a fallback:
+
+```sh
+go install golang.org/x/vuln/cmd/govulncheck@latest
+```
+
 ## Usage
 
 ```
@@ -48,10 +54,21 @@ gobump ./... -soak=30d -test="make test" && \
 
 ## Development
 
-Requires [Nix](https://nixos.org/) with flakes enabled. All tools (Go, govulncheck, golangci-lint, mage) are pinned in `flake.lock`.
+### Nix setup
+
+If you have [Nix](https://nixos.org/) with flakes enabled basic tools (Go, mage & git) are pinned in `flake.lock`.
 
 ```sh
 nix develop           # enter the dev environment
+```
+
+### Custom setup
+
+You will need to install [Go](https://go.dev/dl) and [mage](https://magefile.org/). Or you can just install Go and use `mage` as `go tool mage ...`:
+
+### Mage flow
+
+```sh
 mage test             # run tests
 mage build            # build ./gobump
 mage ci               # build + test + lint (CI gate)
