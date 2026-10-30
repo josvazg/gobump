@@ -17,6 +17,12 @@ type Config struct {
 	DryRun  bool
 }
 
+// MaxSoakDays is the maximum allowed -soak duration in days. Go ships a new
+// minor roughly every 6 months, so a soak longer than 165 days (about 5
+// months 2 weeks) would leave less than ~2-3 weeks of headroom between the
+// bump and the next minor release, defeating the purpose of soaking.
+const MaxSoakDays = 165
+
 // ParseFlags parses CLI args into a Config and an optional target path.
 // The path is the first non-flag argument, if present.
 func ParseFlags(args []string) (Config, string, error) {
@@ -40,6 +46,13 @@ func ParseFlags(args []string) (Config, string, error) {
 		cfg.Soak = 90 * 24 * time.Hour
 	} else {
 		cfg.Soak = time.Duration(soak)
+	}
+
+	// Reject soak periods so long the release would barely settle before the
+	// next minor release ships.
+	if max := MaxSoakDays * 24 * time.Hour; cfg.Soak > max {
+		return Config{}, "", fmt.Errorf("-soak=%dd exceeds the maximum of %dd (~5 months 2 weeks): Go ships a new minor roughly every 6 months, so a longer soak would leave almost no time on the release before the next one arrives",
+			int(cfg.Soak/(24*time.Hour)), MaxSoakDays)
 	}
 
 	var path string

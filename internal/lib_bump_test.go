@@ -140,3 +140,51 @@ func TestLibBump(t *testing.T) {
 		})
 	}
 }
+
+// During soak, stdlib vulnerability remediation must bump to the highest
+// patch within the module's current major.minor line, not to a newer minor
+// line that is still soaking.
+func TestSoakStdlibVulnStaysInCurrentLine(t *testing.T) {
+	dir := t.TempDir()
+	modPath := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(modPath,
+		[]byte("module example.com/m\n\ngo 1.26.2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-100 * 24 * time.Hour)
+	recent := time.Now().Add(-7 * 24 * time.Hour)
+
+	var calls atomic.Int32
+	r := &runner{
+		cfg:  Config{Soak: 90 * 24 * time.Hour, TestCmd: "echo ok"},
+		path: dir,
+		fetchReleases: func(_ context.Context) ([]Release, error) {
+			return []Release{
+				{Version: "go1.27.0", Date: recent, Stable: true},
+				{Version: "go1.26.3", Date: old, Stable: true},
+			}, nil
+		},
+		goCmd:    func(string, ...string) (string, error) { return "", nil },
+		runShell: func(string, string) error { return nil },
+		checkVulns: func(string) (VulnReport, error) {
+			n := calls.Add(1)
+			if n == 1 {
+				return VulnReport{Findings: []Finding{
+					{OSV: "GO-STDLIB", Module: "stdlib", FixedVersion: "go1.27.0", Package: "net/http"},
+				}}, errors.New("vulnerable")
+			}
+			return VulnReport{}, nil
+		},
+	}
+
+	if code := r.run(context.Background()); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	got, err := ReadGoVersion(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "1.26.3" {
+		t.Errorf("go version = %q, want 1.26.3 (must not jump to still-soaking 1.27.0)", got)
+	}
+}
