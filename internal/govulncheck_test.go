@@ -136,7 +136,7 @@ func TestGovulncheck_handlesFindingsWithNilError(t *testing.T) {
 		},
 	}
 
-	if err := r.fixVulns(context.Background(), filepath.Join(dir, "go.mod"), dir); err != nil {
+	if err := r.fixVulns(context.Background(), filepath.Join(dir, "go.mod"), dir, "1.21.0"); err != nil {
 		t.Fatalf("fixVulns returned error: %v", err)
 	}
 	if vulnCalls.Load() != 2 {
@@ -182,7 +182,7 @@ func TestGovulncheck_failsWhenFixLeavesFindings(t *testing.T) {
 		},
 	}
 
-	if err := r.fixVulns(context.Background(), filepath.Join(dir, "go.mod"), dir); err == nil {
+	if err := r.fixVulns(context.Background(), filepath.Join(dir, "go.mod"), dir, "1.21.0"); err == nil {
 		t.Fatal("fixVulns returned nil; want non-nil when post-fix re-run still reports findings")
 	}
 }
@@ -221,7 +221,7 @@ func TestGovulncheck_reportsFindingCountsForEachScan(t *testing.T) {
 		},
 	}
 
-	if err := r.fixVulns(context.Background(), filepath.Join(dir, "go.mod"), dir); err != nil {
+	if err := r.fixVulns(context.Background(), filepath.Join(dir, "go.mod"), dir, "1.21.0"); err != nil {
 		t.Fatalf("fixVulns returned error: %v", err)
 	}
 	if vulnCalls.Load() != 2 {

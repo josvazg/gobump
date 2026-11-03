@@ -152,8 +152,12 @@ func (r *runner) skipVulns(reason string) {
 //   - library findings: go get module@fixedVersion + go mod tidy
 //   - stdlib findings: bump go directive to latest patch + go mod tidy
 //
+// current is the bare Go version from the module's go directive (e.g.
+// "1.26.2"); stdlib remediation stays within that major.minor line so a
+// release still in soak is not pulled in.
+//
 // If any fix was applied, govulncheck is re-run to confirm clean.
-func (r *runner) fixVulns(ctx context.Context, modFile, modDir string) error {
+func (r *runner) fixVulns(ctx context.Context, modFile, modDir, current string) error {
 	if r.shouldSkip("govulncheck") {
 		r.skipVulns("-skip=govulncheck")
 		return nil
@@ -192,15 +196,14 @@ func (r *runner) fixVulns(ctx context.Context, modFile, modDir string) error {
 		if err != nil {
 			return fmt.Errorf("refetching releases after govulncheck failure: %w", err)
 		}
-		L2 := LatestStable(releases)
+		L2 := latestStableInLine(releases, current)
 		if L2 == nil {
-			return fmt.Errorf("no stable Go release information after refetch")
+			// Do not fall back to the latest stable overall: jumping to a
+			// different major.minor line could pull in a release still in
+			// soak. Fail loudly instead.
+			return fmt.Errorf("no stable Go release in line %s after refetch; bump manually", current)
 		}
-		cur, err := ReadGoVersion(modFile)
-		if err != nil {
-			return err
-		}
-		if compareGoVersions(L2.Version, "go"+cur) > 0 {
+		if compareGoVersions(L2.Version, "go"+current) > 0 {
 			fmt.Fprintf(os.Stderr, "gobump: retrying with newer Go patch %s\n", strings.TrimPrefix(L2.Version, "go"))
 			if err := WriteGoVersion(modFile, L2.Version); err != nil {
 				return err
@@ -227,6 +230,23 @@ func (r *runner) fixVulns(ctx context.Context, modFile, modDir string) error {
 		return err
 	}
 	return nil
+}
+
+// latestStableInLine returns the newest stable release in the same Go
+// major.minor line as current (bare form, e.g. "1.26.2"), or nil when no
+// stable release matches that line.
+func latestStableInLine(releases []Release, current string) *Release {
+	var best *Release
+	for i := range releases {
+		rel := &releases[i]
+		if !rel.Stable || isMajorBump(current, rel.Version) {
+			continue
+		}
+		if best == nil || compareGoVersions(rel.Version, best.Version) > 0 {
+			best = rel
+		}
+	}
+	return best
 }
 
 // bumpModule updates a single go.mod when appropriate. Returns (dirty, exitCode)
@@ -267,7 +287,7 @@ func (r *runner) bumpModule(ctx context.Context, modFile string) (dirty bool, co
 	}
 
 	if soaking {
-		if err := r.fixVulns(ctx, modFile, modDir); err != nil {
+		if err := r.fixVulns(ctx, modFile, modDir, current); err != nil {
 			return dirtyNow(), 1
 		}
 		return false, 0
@@ -296,7 +316,7 @@ func (r *runner) bumpModule(ctx context.Context, modFile string) (dirty bool, co
 		fmt.Fprintf(os.Stderr, "gobump: go mod tidy in %s: %v\n", modDir, err)
 		return dirtyNow(), 1
 	}
-	if err := r.fixVulns(ctx, modFile, modDir); err != nil {
+	if err := r.fixVulns(ctx, modFile, modDir, current); err != nil {
 		return dirtyNow(), 1
 	}
 	return dirtyNow(), 0

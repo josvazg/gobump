@@ -1,6 +1,7 @@
 package internal_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -82,5 +83,24 @@ func TestParseFlags_soakDuration(t *testing.T) {
 				t.Errorf("Soak = %v, want %v", cfg.Soak, tc.want)
 			}
 		})
+	}
+}
+
+func TestParseFlags_soakMaximum(t *testing.T) {
+	cfg, _, err := internal.ParseFlags([]string{"-soak=165d"})
+	if err != nil {
+		t.Fatalf("ParseFlags: %v", err)
+	}
+	if cfg.Soak != internal.MaxSoakDays*24*time.Hour {
+		t.Errorf("Soak = %v, want %dd", cfg.Soak, internal.MaxSoakDays)
+	}
+
+	_, _, err = internal.ParseFlags([]string{"-soak=166d"})
+	if err == nil {
+		t.Fatal("expected error for soak above the maximum, got nil")
+	}
+	wantErr := "-soak=166d exceeds the maximum of 165d"
+	if !strings.Contains(err.Error(), wantErr) {
+		t.Errorf("error %q does not contain %q", err.Error(), wantErr)
 	}
 }
